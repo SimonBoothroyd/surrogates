@@ -1,5 +1,4 @@
 """
-surrogates
 Automated surrogate model fitting and evaluation.
 """
 import sys
@@ -15,7 +14,7 @@ pytest_runner = ['pytest-runner'] if needs_pytest else []
 try:
     with open("README.md", "r") as handle:
         long_description = handle.read()
-except:
+except IOError:
     long_description = "\n".join(short_description[2:])
 
 
