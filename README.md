@@ -8,7 +8,7 @@ surrogates
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Automated surrogate model fitting and evaluation.
-
+ 
 ### Copyright
 
 Copyright (c) 2020, Simon Boothroyd
