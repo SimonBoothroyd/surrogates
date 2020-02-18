@@ -50,10 +50,18 @@ class StollWerthSurrogate(Model):
         )
 
         self._b_C1 = numpy.array(parameters["Stoll"]["rho_L_star_params"]["C1_params"])
-        self._b_C2_L = numpy.array(parameters["Stoll"]["rho_L_star_params"]["C2_params"])
-        self._b_C3_L = numpy.array(parameters["Stoll"]["rho_L_star_params"]["C3_params"])
-        self._b_C2_v = numpy.array(parameters["Stoll"]["rho_v_star_params"]["C2_params"])
-        self._b_C3_v = numpy.array(parameters["Stoll"]["rho_v_star_params"]["C3_params"])
+        self._b_C2_L = numpy.array(
+            parameters["Stoll"]["rho_L_star_params"]["C2_params"]
+        )
+        self._b_C3_L = numpy.array(
+            parameters["Stoll"]["rho_L_star_params"]["C3_params"]
+        )
+        self._b_C2_v = numpy.array(
+            parameters["Stoll"]["rho_v_star_params"]["C2_params"]
+        )
+        self._b_C3_v = numpy.array(
+            parameters["Stoll"]["rho_v_star_params"]["C3_params"]
+        )
 
         self._b_c1 = numpy.array(parameters["Stoll"]["P_v_star_params"]["c1_params"])
         self._b_c2 = numpy.array(parameters["Stoll"]["P_v_star_params"]["c2_params"])
@@ -378,9 +386,7 @@ class StollWerthSurrogate(Model):
         rho = rho_star * molecular_weight / sigma ** 3 / 6.02214 * 10.0
         return rho  # [kg/m3]
 
-    def vapor_pressure_star(
-        self, temperature_star, quadrupole_star, bond_length_star
-    ):
+    def vapor_pressure_star(self, temperature_star, quadrupole_star, bond_length_star):
         """Computes the reduced saturation pressure of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
@@ -469,11 +475,7 @@ class StollWerthSurrogate(Model):
             temperature_star, quadrupole_star_sqr, bond_length_star
         )
         vapor_pressure = (
-            vapor_pressure_star
-            * epsilon
-            / sigma ** 3
-            * self._reduced_boltzmann
-            * 1.0e1
+            vapor_pressure_star * epsilon / sigma ** 3 * self._reduced_boltzmann * 1.0e1
         )
         return vapor_pressure  # [kPa]
 
@@ -559,5 +561,5 @@ class StollWerthSurrogate(Model):
         return (
             self.liquid_density(temperatures, *parameters),
             self.vapor_pressure(temperatures, *parameters),
-            self.surface_tension(temperatures, *parameters)
+            self.surface_tension(temperatures, *parameters),
         )

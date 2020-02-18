@@ -80,9 +80,7 @@ def test_vapor_pressure():
 
     temperatures = numpy.array([308.0])
 
-    value = model.vapor_pressure(
-        temperatures, epsilon, sigma, bond_length, quadrupole
-    )
+    value = model.vapor_pressure(temperatures, epsilon, sigma, bond_length, quadrupole)
     assert numpy.isclose(value, 5027.57796073)
 
 
@@ -100,7 +98,6 @@ def test_surface_tension():
     ) = generate_parameters()
 
     temperatures = numpy.array([308.0])
-    temperatures_star = temperatures / epsilon
 
     value = model.surface_tension(temperatures, epsilon, sigma, bond_length, quadrupole)
     assert numpy.isclose(value, 0.00017652)
@@ -114,7 +111,9 @@ def test_evaluate():
     parameters = numpy.array([epsilon, sigma, bond_length, quadrupole])
     temperatures = numpy.array([298.0, 300.0, 308.0])
 
-    liquid_densities, vapor_pressure, surface_tensions = model.evaluate(parameters, temperatures)
+    liquid_densities, vapor_pressure, surface_tensions = model.evaluate(
+        parameters, temperatures
+    )
 
     assert len(liquid_densities) == len(temperatures)
     assert len(vapor_pressure) == len(temperatures)
