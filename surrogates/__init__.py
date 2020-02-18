@@ -1,5 +1,4 @@
 """
-surrogates
 Automated surrogate model fitting and evaluation.
 """
 
