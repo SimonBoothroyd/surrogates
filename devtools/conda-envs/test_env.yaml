@@ -11,15 +11,13 @@ dependencies:
   - codecov
 
     # Main
-  - numpy
-  - scipy
-  - pyyaml
-  - pandas
-  - matplotlib
-  - pymbar
-  - tqdm
-  - pint
-  - uncertainties
   - arviz
   - corner
+  - matplotlib
+  - numpy
+  - pandas
   - pydantic
+  - pymbar
+  - scikit-learn
+  - tqdm
+  - pyyaml
