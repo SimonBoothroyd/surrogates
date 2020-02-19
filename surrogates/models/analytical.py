@@ -559,7 +559,7 @@ class StollWerthSurrogate(Model):
     def evaluate(self, parameters, temperatures):
 
         return (
-            self.liquid_density(temperatures, *parameters),
-            self.vapor_pressure(temperatures, *parameters),
-            self.surface_tension(temperatures, *parameters),
+            self.liquid_density(temperatures, *parameters).reshape(-1, 1),
+            self.vapor_pressure(temperatures, *parameters).reshape(-1, 1),
+            self.surface_tension(temperatures, *parameters).reshape(-1, 1),
         )

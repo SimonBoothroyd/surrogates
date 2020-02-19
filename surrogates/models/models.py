@@ -23,12 +23,12 @@ class Model(abc.ABC):
         -------
         numpy.ndarray
             The values of the liquid density evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures)).
+            and using the specified parameters (shape=(n_temperatures, 1)).
         numpy.ndarray
             The values of the vapor pressure evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures)).
+            and using the specified parameters (shape=(n_temperatures, 1)).
         numpy.ndarray
             The values of the surface tension evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures)).
+            and using the specified parameters (shape=(n_temperatures, 1)).
         """
         raise NotImplementedError()
