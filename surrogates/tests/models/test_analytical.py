@@ -61,7 +61,9 @@ def test_liquid_density():
 
     temperatures = numpy.array([308.0])
 
-    value = model.liquid_density(numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures)
+    value = model.liquid_density(
+        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
+    )
     assert numpy.isclose(value, 285.1592692)
 
 
@@ -80,7 +82,9 @@ def test_vapor_pressure():
 
     temperatures = numpy.array([308.0])
 
-    value = model.vapor_pressure(numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures)
+    value = model.vapor_pressure(
+        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
+    )
     assert numpy.isclose(value, 5027.57796073)
 
 
@@ -99,7 +103,9 @@ def test_surface_tension():
 
     temperatures = numpy.array([308.0])
 
-    value = model.surface_tension(numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures)
+    value = model.surface_tension(
+        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
+    )
     assert numpy.isclose(value, 0.00017652)
 
 
