@@ -33,6 +33,9 @@ def finite_difference(function, parameters, pertubation_fraction=1.001):
 
     for index in range(len(parameters)):
 
+        if numpy.isclose(parameters[index], 0.0):
+            continue
+
         perturbed_parameters = parameters.copy()
         perturbed_parameters[index] *= pertubation_fraction
 

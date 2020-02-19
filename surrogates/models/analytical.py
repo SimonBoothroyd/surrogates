@@ -1,3 +1,4 @@
+import functools
 import os
 
 import numpy
@@ -5,6 +6,7 @@ import yaml
 from pkg_resources import resource_filename
 
 from surrogates.models import Model
+from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthSurrogate(Model):
@@ -346,29 +348,28 @@ class StollWerthSurrogate(Model):
 
         return rho_star
 
-    def liquid_density(self, temperature, epsilon, sigma, bond_length, quadrupole):
+    def liquid_density(self, parameters, temperature):
         """Computes the liquid density of the two-center Lennard-Jones
         model for a given set of model parameters over a specified range
         of temperatures.
 
         Parameters
         ----------
+        parameters: numpy.ndarray
+            The parameters to evaluate the model at. This should be an
+            array of shape=(4,1) which contains the epsilon parameter in
+            units of K, the sigma parameter in units of nm, the bond-length
+            parameter in units of nm and the quadrupole parameter in units
+            of Debye * nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
-        epsilon: float
-            The epsilon parameter in units of K.
-        sigma: float
-            The sigma parameter in units of nm.
-        bond_length: float
-            The bond-length parameter in units of nm.
-        quadrupole: float
-            The quadrupole parameter in units of Debye * nm.
 
         Returns
         -------
         numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         molecular_weight = self.molecular_weight
 
@@ -440,29 +441,27 @@ class StollWerthSurrogate(Model):
         )
         return vapor_pressure_star
 
-    def vapor_pressure(self, temperature, epsilon, sigma, bond_length, quadrupole):
+    def vapor_pressure(self, parameters, temperature):
         """Computes the saturation pressure of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
+        parameters: numpy.ndarray
+            The parameters to evaluate the model at. This should be an
+            array of shape=(4,1) which contains the epsilon parameter in
+            units of K, the sigma parameter in units of nm, the bond-length
+            parameter in units of nm and the quadrupole parameter in units
+            of Debye * nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
-        epsilon: float
-            The epsilon parameter in units of K.
-        sigma: float
-            The sigma parameter in units of nm.
-        bond_length: float
-            The bond-length parameter in units of nm.
-        quadrupole: float
-            The quadrupole parameter in units of Debye * nm.
-
         Returns
         -------
         numpy.ndarray
             The evaluated saturation pressures in units of kPa
         """
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         temperature_star = temperature / epsilon
 
@@ -511,29 +510,28 @@ class StollWerthSurrogate(Model):
         )
         return surface_tension_star
 
-    def surface_tension(self, temperature, epsilon, sigma, bond_length, quadrupole):
+    def surface_tension(self, parameters, temperature):
         """Computes the surface tension of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
+        parameters: numpy.ndarray
+            The parameters to evaluate the model at. This should be an
+            array of shape=(4,1) which contains the epsilon parameter in
+            units of K, the sigma parameter in units of nm, the bond-length
+            parameter in units of nm and the quadrupole parameter in units
+            of Debye * nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
-        epsilon: float
-            The epsilon parameter in units of K.
-        sigma: float
-            The sigma parameter in units of nm.
-        bond_length: float
-            The bond-length parameter in units of nm.
-        quadrupole: float
-            The quadrupole parameter in units of Debye * nm.
 
         Returns
         -------
         numpy.ndarray
             The evaluated surface tensions in units of J / m^2
         """
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         # Note that epsilon is defined as epsilon/kB
         temperature_star = temperature / epsilon
@@ -559,7 +557,47 @@ class StollWerthSurrogate(Model):
     def evaluate(self, parameters, temperatures):
 
         return (
-            self.liquid_density(temperatures, *parameters).reshape(-1, 1),
-            self.vapor_pressure(temperatures, *parameters).reshape(-1, 1),
-            self.surface_tension(temperatures, *parameters).reshape(-1, 1),
+            self.liquid_density(parameters, temperatures).reshape(-1, 1),
+            self.vapor_pressure(parameters, temperatures).reshape(-1, 1),
+            self.surface_tension(parameters, temperatures).reshape(-1, 1),
         )
+
+    def evaluate_gradients(self, parameters, temperatures):
+        """Evaluate the gradients of this model for a set of parameters.
+
+        Parameters
+        ----------
+        parameters: numpy.ndarray
+            The values of the parameters to evaluate at with
+            shape=(n parameters, 1).
+        temperatures: numpy.ndarray
+            The temperatures to evaluate the properties at with
+            shape=(n_temperatures).
+
+        Returns
+        -------
+        numpy.ndarray
+            The gradients of the liquid density evaluated at each temperature
+            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
+        numpy.ndarray
+            The gradients of the vapor pressure evaluated at each temperature
+            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
+        numpy.ndarray
+            The gradients of the surface tension evaluated at each temperature
+            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
+        """
+
+        density_gradients = finite_difference(
+            functools.partial(self.liquid_density, temperature=temperatures),
+            parameters,
+        ).reshape(1, -1)
+        vapor_gradients = finite_difference(
+            functools.partial(self.vapor_pressure, temperature=temperatures),
+            parameters,
+        ).reshape(1, -1)
+        surface_gradients = finite_difference(
+            functools.partial(self.surface_tension, temperature=temperatures),
+            parameters,
+        ).reshape(1, -1)
+
+        return density_gradients, vapor_gradients, surface_gradients
