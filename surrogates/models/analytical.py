@@ -18,7 +18,7 @@ class StollWerthSurrogate(Model):
     _reduced_boltzmann = 1.38065
     _reduced_D_to_sqrt_J_m3 = 3.1623
 
-    def __init__(self, molecular_weight, file_path=None):
+    def __init__(self, molecular_weight, bond_length, file_path=None):
         """
         Parameters
         ----------
@@ -31,6 +31,7 @@ class StollWerthSurrogate(Model):
         """
 
         self.molecular_weight = molecular_weight
+        self.bond_length = bond_length
 
         if file_path is None:
 
@@ -358,9 +359,7 @@ class StollWerthSurrogate(Model):
         parameters: numpy.ndarray
             The parameters to evaluate the model at. This should be an
             array of shape=(4,1) which contains the epsilon parameter in
-            units of K, the sigma parameter in units of nm, the bond-length
-            parameter in units of nm and the quadrupole parameter in units
-            of Debye * nm.
+            units of K, the sigma parameter in units of nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
@@ -369,7 +368,8 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
+        epsilon, sigma = parameters
+        quadrupole = 0.0
 
         molecular_weight = self.molecular_weight
 
@@ -379,7 +379,7 @@ class StollWerthSurrogate(Model):
         quadrupole_star_sqr = (quadrupole * self._reduced_D_to_sqrt_J_m3) ** 2 / (
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
-        bond_length_star = bond_length / sigma
+        bond_length_star = self.bond_length / sigma
 
         rho_star = self.liquid_density_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
@@ -450,10 +450,8 @@ class StollWerthSurrogate(Model):
         ----------
         parameters: numpy.ndarray
             The parameters to evaluate the model at. This should be an
-            array of shape=(4,1) which contains the epsilon parameter in
-            units of K, the sigma parameter in units of nm, the bond-length
-            parameter in units of nm and the quadrupole parameter in units
-            of Debye * nm.
+            array of shape=(2,1) which contains the epsilon parameter in
+            units of K, the sigma parameter in units of nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
         Returns
@@ -461,14 +459,15 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated saturation pressures in units of kPa
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
+        epsilon, sigma = parameters
+        quadrupole = 0.0
 
         temperature_star = temperature / epsilon
 
         quadrupole_star_sqr = (quadrupole * self._reduced_D_to_sqrt_J_m3) ** 2 / (
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
-        bond_length_star = bond_length / sigma
+        bond_length_star = self.bond_length / sigma
 
         vapor_pressure_star = self.vapor_pressure_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
@@ -520,9 +519,7 @@ class StollWerthSurrogate(Model):
         parameters: numpy.ndarray
             The parameters to evaluate the model at. This should be an
             array of shape=(4,1) which contains the epsilon parameter in
-            units of K, the sigma parameter in units of nm, the bond-length
-            parameter in units of nm and the quadrupole parameter in units
-            of Debye * nm.
+            units of K, the sigma parameter in units of nm.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
@@ -531,7 +528,8 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated surface tensions in units of J / m^2
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
+        epsilon, sigma = parameters
+        quadrupole = 0.0
 
         # Note that epsilon is defined as epsilon/kB
         temperature_star = temperature / epsilon
@@ -540,7 +538,7 @@ class StollWerthSurrogate(Model):
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
 
-        bond_length_star = bond_length / sigma
+        bond_length_star = self.bond_length / sigma
 
         surface_tension_star = self.surface_tension_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
