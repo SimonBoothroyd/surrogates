@@ -46,7 +46,7 @@ class BaseKernel(abc.ABC):
         # serve as a surrogate stand-in for the openff-evaluator, being
         # used to generate 'simulation results' rapidly.
         self._analytical_model = StollWerthSurrogate(
-            reference_data_set.molecular_weight
+            reference_data_set.molecular_weight, reference_data_set.bond_length / 10.0
         )
 
     def _initialize_reference_data(self, reference_data_set):
@@ -229,7 +229,7 @@ class BaseKernel(abc.ABC):
             The number of iterations to perform.
         """
 
-        assert len(initial_parameters) == 4
+        assert len(initial_parameters) == 2
 
         current_parameters = initial_parameters.copy()
 
