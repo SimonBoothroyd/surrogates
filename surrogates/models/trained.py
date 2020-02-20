@@ -3,6 +3,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel
 
 from surrogates.models import TrainableModel
+from surrogates.utils.gradients import finite_difference
 
 
 class GaussianProcessModel(TrainableModel):
@@ -102,7 +103,7 @@ class GaussianProcessModel(TrainableModel):
 
             self._gaussian_processes.append(gaussian_process)
 
-    def evaluate(self, parameters, temperatures):
+    def evaluate(self, parameters, temperatures, calculate_gradients=False):
 
         if len(self._gaussian_processes) == 0:
             raise ValueError("The model has not yet been trained upon any data.")
@@ -132,4 +133,22 @@ class GaussianProcessModel(TrainableModel):
             "surface_tension": surface_tension_std.reshape(-1, 1),
         }
 
-        return values, uncertainties
+        gradients = None
+
+        if calculate_gradients:
+
+            # TODO: In future this should be replaced with the actual derivatives of
+            #       the Gaussian Process.
+            gradients = {
+                "liquid_density": finite_difference(
+                    self._gaussian_processes[0].predict, parameters.reshape(1, -1)
+                ).reshape(1, -1),
+                "vapor_pressure": finite_difference(
+                    self._gaussian_processes[1].predict, parameters.reshape(1, -1)
+                ).reshape(1, -1),
+                "surface_tension": finite_difference(
+                    self._gaussian_processes[2].predict, parameters.reshape(1, -1)
+                ).reshape(1, -1),
+            }
+
+        return values, uncertainties, gradients

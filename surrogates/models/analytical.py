@@ -1,3 +1,4 @@
+import functools
 import os
 
 import numpy
@@ -5,6 +6,7 @@ import yaml
 from pkg_resources import resource_filename
 
 from surrogates.models import Model
+from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthSurrogate(Model):
@@ -552,7 +554,7 @@ class StollWerthSurrogate(Model):
         )
         return surface_tension  # [J/m2]
 
-    def evaluate(self, parameters, temperatures):
+    def evaluate(self, parameters, temperatures, calculate_gradients=False):
 
         values = {
             "liquid_density": self.liquid_density(parameters, temperatures).reshape(
@@ -573,4 +575,23 @@ class StollWerthSurrogate(Model):
             "surface_tension": numpy.zeros(values["surface_tension"].shape),
         }
 
-        return values, uncertainties
+        gradients = None
+
+        if calculate_gradients:
+
+            gradients = {
+                "liquid_density": finite_difference(
+                    functools.partial(self.liquid_density, temperature=temperatures),
+                    parameters,
+                ).reshape(1, -1),
+                "vapor_pressure": finite_difference(
+                    functools.partial(self.vapor_pressure, temperature=temperatures),
+                    parameters,
+                ).reshape(1, -1),
+                "surface_tension": finite_difference(
+                    functools.partial(self.surface_tension, temperature=temperatures),
+                    parameters,
+                ).reshape(1, -1),
+            }
+
+        return values, uncertainties, gradients

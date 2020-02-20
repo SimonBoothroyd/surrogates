@@ -111,7 +111,7 @@ class BaseKernel(abc.ABC):
             # Normalize the uncertainties.
             reference_data[:, 2] /= self._data_scales[label]
 
-    def _simulate_properties(self, parameters, temperatures):
+    def _simulate_properties(self, parameters, temperatures, calculate_gradients):
         """A black-box function which 'runs' simulations using the model
         parameter at the specified temperature to calculate the liquid
         density, vapor pressure and surface tension.
@@ -122,6 +122,9 @@ class BaseKernel(abc.ABC):
             The parameters to simulate at.
         temperatures: numpy.ndarray
             The temperatures to simulate at.
+        calculate_gradients: bool
+            Whether or not to evaluate the gradients of each
+            value with respect to the parameters.
 
         Returns
         -------
@@ -131,10 +134,16 @@ class BaseKernel(abc.ABC):
         dict of str and numpy.ndarray
             The uncertainties in the values of the properties evaluated by this model
             using the specified parameters. Each array has a shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray, optional
+            The gradients of each value with respect to each of the properties evaluated by
+            this model. Each array has a shape=(n_temperatures, n_parameters)). This output
+            will be `None` if `calculate_gradients == False`.
         """
-        return self._analytical_model.evaluate(parameters, temperatures)
+        return self._analytical_model.evaluate(
+            parameters, temperatures, calculate_gradients
+        )
 
-    def _evaluate_model(self, parameters, temperatures):
+    def _evaluate_model(self, parameters, temperatures, calculate_gradients):
         """Evaluates the model at a specified set of parameters and
         temperature. If the surrogate model cannot be evaluated with
         sufficient accuracy, a new 'simulation' (or set of simulations)
@@ -146,6 +155,9 @@ class BaseKernel(abc.ABC):
             The parameters to simulate at.
         temperatures: numpy.ndarray
             The temperatures to simulate at.
+        calculate_gradients: bool
+            Whether or not to evaluate the gradients of each
+            value with respect to the parameters.
 
         Returns
         -------
@@ -155,6 +167,10 @@ class BaseKernel(abc.ABC):
         dict of str and numpy.ndarray
             The uncertainties in the values of the properties evaluated by this model
             using the specified parameters. Each array has a shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray, optional
+            The gradients of each value with respect to each of the properties evaluated by
+            this model. Each array has a shape=(n_temperatures, n_parameters)). This output
+            will be `None` if `calculate_gradients == False`.
         """
 
         # # TODO: Once uncertainties are added perform check whether to re-simulate
@@ -176,11 +192,13 @@ class BaseKernel(abc.ABC):
 
         # Evaluate the trained model.
         # if use_simulation:
-        values, uncertainties = self._simulate_properties(parameters, temperatures)
+        values, uncertainties, gradients = self._simulate_properties(
+            parameters, temperatures, calculate_gradients
+        )
         # else:
         #     observations = [*self._model.evaluate(parameters, temperatures)]
 
-        return values, uncertainties
+        return values, uncertainties, gradients
 
     @abc.abstractmethod
     def _step(self, current_iteration, current_parameters):
