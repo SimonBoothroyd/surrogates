@@ -19,7 +19,7 @@ class BaseKernel(abc.ABC):
     def parameter_trace(self):
         return self._parameter_trace
 
-    def __init__(self, model, reference_data_set):
+    def __init__(self, model, reference_data_set, target_properties=None):
         """
         Parameters
         ----------
@@ -27,6 +27,10 @@ class BaseKernel(abc.ABC):
             The model to optimize.
         reference_data_set: DataSet
             The data set to train against.
+        target_properties: list of str, optional
+            The properties to fit against. If `None`, a default list of
+            `['liquid_density', 'vapor_pressure', 'surface_tension']` will
+            be used.
         """
 
         self._model = model
@@ -40,7 +44,15 @@ class BaseKernel(abc.ABC):
 
         self._parameter_trace = None
 
-        self._initialize_reference_data(reference_data_set)
+        all_properties = ["liquid_density", "vapor_pressure", "surface_tension"]
+
+        if target_properties is None:
+            target_properties = [*all_properties]
+
+        assert len(target_properties) > 0
+        assert all(x in all_properties for x in target_properties)
+
+        self._initialize_reference_data(reference_data_set, target_properties)
 
         # Construct an analytical Stoll-Werth surrogate model. This will
         # serve as a surrogate stand-in for the openff-evaluator, being
@@ -49,13 +61,17 @@ class BaseKernel(abc.ABC):
             reference_data_set.molecular_weight, reference_data_set.bond_length / 10.0
         )
 
-    def _initialize_reference_data(self, reference_data_set):
+    def _initialize_reference_data(self, reference_data_set, target_properties):
         """Extracts and normalizes data from a target data set
 
         Parameters
         ----------
         reference_data_set: DataSet
             The data set being trained against.
+        target_properties: list of str, optional
+            The properties to fit against. If `None`, a default list of
+            `['liquid_density', 'vapor_pressure', 'surface_tension']` will
+            be used.
         """
 
         if (
@@ -110,6 +126,17 @@ class BaseKernel(abc.ABC):
 
             # Normalize the uncertainties.
             reference_data[:, 2] /= self._data_scales[label]
+
+        # Retain only the properties of interest.
+        self._data_scales = {
+            x: y for x, y in self._data_scales.items() if x in target_properties
+        }
+        self._data_shifts = {
+            x: y for x, y in self._data_shifts.items() if x in target_properties
+        }
+        self._reference_data = {
+            x: y for x, y in self._reference_data.items() if x in target_properties
+        }
 
     def _simulate_properties(self, parameters, temperatures, calculate_gradients):
         """A black-box function which 'runs' simulations using the model

@@ -55,7 +55,7 @@ def test_gradient_descent(small_data_set):
     iterations = 1
 
     # Run the optimization
-    optimizer = GradientDescent(model, small_data_set, learning_rates)
+    optimizer = GradientDescent(model, small_data_set, None, learning_rates)
     optimizer.run(initial_parameters, iterations)
 
     assert optimizer.parameter_trace is not None
