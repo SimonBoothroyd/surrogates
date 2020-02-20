@@ -111,13 +111,13 @@ class GaussianProcessModel(Model):
             raise NotImplementedError()
 
         liquid_density, _ = self._gaussian_processes[0].predict(
-            parameters, return_std=True
+            parameters.reshape(1, -1), return_std=True
         )
         vapor_pressure, _ = self._gaussian_processes[1].predict(
-            parameters, return_std=True
+            parameters.reshape(1, -1), return_std=True
         )
         surface_tension, _ = self._gaussian_processes[2].predict(
-            parameters, return_std=True
+            parameters.reshape(1, -1), return_std=True
         )
 
         return (
