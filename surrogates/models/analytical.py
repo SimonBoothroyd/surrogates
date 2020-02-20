@@ -1,4 +1,3 @@
-import functools
 import os
 
 import numpy
@@ -6,7 +5,6 @@ import yaml
 from pkg_resources import resource_filename
 
 from surrogates.models import Model
-from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthSurrogate(Model):
@@ -561,43 +559,3 @@ class StollWerthSurrogate(Model):
             self.vapor_pressure(parameters, temperatures).reshape(-1, 1),
             self.surface_tension(parameters, temperatures).reshape(-1, 1),
         )
-
-    def evaluate_gradients(self, parameters, temperatures):
-        """Evaluate the gradients of this model for a set of parameters.
-
-        Parameters
-        ----------
-        parameters: numpy.ndarray
-            The values of the parameters to evaluate at with
-            shape=(n parameters, 1).
-        temperatures: numpy.ndarray
-            The temperatures to evaluate the properties at with
-            shape=(n_temperatures).
-
-        Returns
-        -------
-        numpy.ndarray
-            The gradients of the liquid density evaluated at each temperature
-            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
-        numpy.ndarray
-            The gradients of the vapor pressure evaluated at each temperature
-            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
-        numpy.ndarray
-            The gradients of the surface tension evaluated at each temperature
-            with respect to the specified parameters (shape=(n_temperatures, n_parameters)).
-        """
-
-        density_gradients = finite_difference(
-            functools.partial(self.liquid_density, temperature=temperatures),
-            parameters,
-        ).reshape(1, -1)
-        vapor_gradients = finite_difference(
-            functools.partial(self.vapor_pressure, temperature=temperatures),
-            parameters,
-        ).reshape(1, -1)
-        surface_gradients = finite_difference(
-            functools.partial(self.surface_tension, temperature=temperatures),
-            parameters,
-        ).reshape(1, -1)
-
-        return density_gradients, vapor_gradients, surface_gradients

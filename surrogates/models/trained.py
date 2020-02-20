@@ -125,6 +125,3 @@ class GaussianProcessModel(TrainableModel):
             vapor_pressure.reshape(-1, 1),
             surface_tension.reshape(-1, 1),
         )
-
-    def evaluate_gradients(self, parameters, temperatures):
-        raise NotImplementedError()
