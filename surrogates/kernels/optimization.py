@@ -17,19 +17,17 @@ class GradientDescent(BaseKernel):
     def cost_function_trace(self):
         return self._cost_function_trace
 
-    def __init__(self, model, reference_data_set, learning_rates):
+    def __init__(self, model, reference_data_set, target_properties, learning_rates):
         """
         Parameters
         ----------
-        model: Model
-            The model to optimize.
-        reference_data_set: DataSet
-            The data set to train against.
         learning_rates: numpy.ndarray
             The rate at which each parameter is allowed to change.
         """
 
-        super(GradientDescent, self).__init__(model, reference_data_set)
+        super(GradientDescent, self).__init__(
+            model, reference_data_set, target_properties
+        )
 
         self._cost_function_trace = None
         self._learning_rates = learning_rates
@@ -61,7 +59,7 @@ class GradientDescent(BaseKernel):
 
         total_observables = 0.0
 
-        for label in values:
+        for label in self._reference_data:
 
             values[label] -= self._data_shifts[label]
             values[label] /= self._data_scales[label]
