@@ -1,4 +1,3 @@
-import functools
 import os
 
 import numpy
@@ -6,7 +5,6 @@ import yaml
 from pkg_resources import resource_filename
 
 from surrogates.models import Model
-from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthSurrogate(Model):
