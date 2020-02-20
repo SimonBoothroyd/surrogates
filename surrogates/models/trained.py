@@ -2,10 +2,10 @@ import numpy
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel
 
-from surrogates.models import Model
+from surrogates.models import TrainableModel
 
 
-class GaussianProcessModel(Model):
+class GaussianProcessModel(TrainableModel):
     """A model which evaluates a trained Gaussian Process based on a radial-basis
     function kernel. The Gaussian Process may be retrained with extra data on the
     fly.

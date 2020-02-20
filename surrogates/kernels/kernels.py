@@ -1,30 +1,23 @@
-import functools
+import abc
 import logging
 
 import arviz
 import numpy
-from matplotlib import pyplot
 from tqdm import tqdm
 
 from surrogates.models.analytical import StollWerthSurrogate
-from surrogates.models.trained import GaussianProcessModel
-from surrogates.utils.gradients import finite_difference
 
 logger = logging.getLogger(__name__)
 
 
-class GradientDescent:
-    """A simple kernel for optimizing a model using the gradient
-    descent algorithm.
+class BaseKernel(abc.ABC):
+    """The base class for any object which aims to fit a set of
+    model parameters against a target data set.
     """
 
     @property
     def parameter_trace(self):
         return self._parameter_trace
-
-    @property
-    def cost_function_trace(self):
-        return self._cost_function_trace
 
     def __init__(self, model, reference_data_set):
         """
@@ -38,9 +31,6 @@ class GradientDescent:
 
         self._model = model
 
-        if not isinstance(model, GaussianProcessModel):
-            raise NotImplementedError()
-
         self._temperatures = None
 
         self._data_scales = None
@@ -49,7 +39,6 @@ class GradientDescent:
         self._reference_data = None
 
         self._parameter_trace = None
-        self._cost_function_trace = None
 
         self._initialize_reference_data(reference_data_set)
 
@@ -151,103 +140,74 @@ class GradientDescent:
         """
         return self._analytical_model.evaluate(parameters, temperatures)
 
-    def _evaluate_cost_function(
-        self, parameters, temperatures, use_simulation=False, retrain_model=True
-    ):
+    def _evaluate_model(self, parameters, temperatures):
 
-        # TODO: Once uncertainties are added perform check whether to re-simulate
-        #       and retrain the GP.
-        if retrain_model:
-
-            (
-                liquid_density,
-                vapor_pressure,
-                surface_tensions,
-            ) = self._simulate_properties(parameters, temperatures)
-            self._model.add_training_point(
-                parameters,
-                temperatures,
-                liquid_density[0, 0],
-                vapor_pressure[0, 0],
-                surface_tensions[0, 0],
-            )
+        # # TODO: Once uncertainties are added perform check whether to re-simulate
+        # #       and retrain the GP.
+        # if retrain_model:
+        #
+        #     (
+        #         liquid_density,
+        #         vapor_pressure,
+        #         surface_tensions,
+        #     ) = self._simulate_properties(parameters, temperatures)
+        #     self._model.add_training_point(
+        #         parameters,
+        #         temperatures,
+        #         liquid_density[0, 0],
+        #         vapor_pressure[0, 0],
+        #         surface_tensions[0, 0],
+        #     )
 
         # Evaluate the trained model.
-        if use_simulation:
-            observations = [*self._simulate_properties(parameters, temperatures)]
-        else:
-            observations = [*self._model.evaluate(parameters, temperatures)]
+        # if use_simulation:
+        observations = [*self._simulate_properties(parameters, temperatures)]
+        # else:
+        #     observations = [*self._model.evaluate(parameters, temperatures)]
 
-        # Normalize the observed data and gradients.
-        cost_function = 0.0
-        total_observables = 0.0
+        return observations
 
-        for index in range(len(observations)):
-            observations[index] -= self._data_shifts[index]
-            observations[index] /= self._data_scales[index]
+    @abc.abstractmethod
+    def _step(self, current_iteration, current_parameters):
+        """Propogate the kernel forward by a single step.
 
-            differences = observations[index] - self._reference_data[index][:, 1]
+        Parameters
+        ----------
+        current_iteration: int
+            The index of the current iteration.
+        current_parameters: numpy.ndarray
+            The current values of the parameters.
 
-            cost_function += numpy.sum(differences ** 2)
-            total_observables += len(observations[index])
+        Returns
+        -------
+        numpy.ndarray
+            The updated parameters.
+        """
+        raise NotImplementedError()
 
-        cost_function /= 2.0 * total_observables
-
-        return cost_function
-
-    def run(self, initial_parameters, learning_rates, iterations):
+    def run(self, initial_parameters, iterations):
         """Run the optimization, starting from an initial set of parameters.
 
         Parameters
         ----------
         initial_parameters: numpy.ndarray
             The parameters to start the optimization from.
-        learning_rates: numpy.ndarray
-            The rate at which each parameter is allowed to change.
         iterations: int
             The number of iterations to perform.
         """
 
         assert len(initial_parameters) == 4
-        assert initial_parameters.shape == learning_rates.shape
 
         current_parameters = initial_parameters.copy()
 
-        # Set up an array to monitor the parameter traces and the cost function
-        # trace.
+        # Set up an array to monitor the parameter traces.
         self._parameter_trace = numpy.zeros((iterations, len(current_parameters)))
-        self._cost_function_trace = numpy.zeros((iterations, 1))
 
-        for step_index in tqdm(range(iterations)):
-
-            # Don't evaluate the gaussian process in the first two steps
-            # while it does not yet have enough training data.
-            use_simulation = step_index < 2
-
-            # Evaluate our cost function
-            cost_function = self._evaluate_cost_function(
-                current_parameters,
-                temperatures=self._temperatures,
-                use_simulation=use_simulation,
-            )
-
-            # Evaluate the gradient of the cost function
-            cost_gradient = finite_difference(
-                functools.partial(
-                    self._evaluate_cost_function,
-                    temperatures=self._temperatures,
-                    use_simulation=use_simulation,
-                    retrain_model=False,
-                ),
-                current_parameters,
-                pertubation_fraction=1.00001
-            )
+        for current_iteration in tqdm(range(iterations)):
 
             # Modify the parameters
-            current_parameters -= cost_gradient * learning_rates
-
-            self._parameter_trace[step_index] = current_parameters
-            self._cost_function_trace[step_index] = cost_function
+            current_parameters = self._step(current_iteration, current_parameters)
+            self._parameter_trace[current_iteration] = current_parameters
 
         return current_parameters
 
@@ -263,9 +223,4 @@ class GradientDescent:
 
         axes = arviz.plot_trace(parameter_trace)
         figure = axes[0][0].figure
-        figure.show()
-
-        figure, axes = pyplot.subplots(1, 1, figsize=(5, 5), dpi=200)
-        axes.plot(self._cost_function_trace, color="#17becf")
-        axes.set_xlabel("steps")
         figure.show()

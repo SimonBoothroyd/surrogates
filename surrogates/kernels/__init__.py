@@ -1,3 +1,3 @@
-from .kernels import GradientDescent
+from .kernels import BaseKernel
 
-__all__ = [GradientDescent]
+__all__ = [BaseKernel]
