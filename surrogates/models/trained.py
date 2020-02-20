@@ -110,18 +110,26 @@ class GaussianProcessModel(TrainableModel):
         if self._temperature not in temperatures:
             raise NotImplementedError()
 
-        liquid_density, _ = self._gaussian_processes[0].predict(
+        liquid_density, liquid_density_std = self._gaussian_processes[0].predict(
             parameters.reshape(1, -1), return_std=True
         )
-        vapor_pressure, _ = self._gaussian_processes[1].predict(
+        vapor_pressure, vapor_pressure_std = self._gaussian_processes[1].predict(
             parameters.reshape(1, -1), return_std=True
         )
-        surface_tension, _ = self._gaussian_processes[2].predict(
+        surface_tension, surface_tension_std = self._gaussian_processes[2].predict(
             parameters.reshape(1, -1), return_std=True
         )
 
-        return (
-            liquid_density.reshape(-1, 1),
-            vapor_pressure.reshape(-1, 1),
-            surface_tension.reshape(-1, 1),
-        )
+        values = {
+            "liquid_density": liquid_density.reshape(-1, 1),
+            "vapor_pressure": vapor_pressure.reshape(-1, 1),
+            "surface_tension": surface_tension.reshape(-1, 1),
+        }
+
+        uncertainties = {
+            "liquid_density": liquid_density_std.reshape(-1, 1),
+            "vapor_pressure": vapor_pressure_std.reshape(-1, 1),
+            "surface_tension": surface_tension_std.reshape(-1, 1),
+        }
+
+        return values, uncertainties

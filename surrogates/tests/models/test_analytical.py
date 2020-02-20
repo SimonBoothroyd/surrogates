@@ -117,10 +117,12 @@ def test_evaluate():
     parameters = numpy.array([epsilon, sigma, bond_length, quadrupole])
     temperatures = numpy.array([298.0, 300.0, 308.0])
 
-    liquid_densities, vapor_pressure, surface_tensions = model.evaluate(
-        parameters, temperatures
-    )
+    values, uncertainties = model.evaluate(parameters, temperatures)
 
-    assert len(liquid_densities) == len(temperatures)
-    assert len(vapor_pressure) == len(temperatures)
-    assert len(surface_tensions) == len(temperatures)
+    assert len(values["liquid_density"]) == len(temperatures)
+    assert len(values["vapor_pressure"]) == len(temperatures)
+    assert len(values["surface_tension"]) == len(temperatures)
+
+    assert len(uncertainties["liquid_density"]) == len(temperatures)
+    assert len(uncertainties["vapor_pressure"]) == len(temperatures)
+    assert len(uncertainties["surface_tension"]) == len(temperatures)

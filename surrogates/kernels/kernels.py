@@ -83,36 +83,33 @@ class BaseKernel(abc.ABC):
 
         # Define a set of normalizing transforms so that our data is roughly
         # in the range of [-1.0, 1.0]
-        self._data_scales = numpy.array(
-            [
-                numpy.max(reference_data_set.liquid_densities[:, 1]),
-                numpy.max(reference_data_set.vapor_pressures[:, 1]),
-                numpy.max(reference_data_set.surface_tensions[:, 1]),
-            ]
-        )
+        self._data_scales = {
+            "liquid_density": numpy.max(reference_data_set.liquid_densities[:, 1]),
+            "vapor_pressure": numpy.max(reference_data_set.vapor_pressures[:, 1]),
+            "surface_tension": numpy.max(reference_data_set.surface_tensions[:, 1]),
+        }
 
-        self._data_shifts = numpy.array(
-            [
-                numpy.mean(reference_data_set.liquid_densities[:, 1]),
-                numpy.mean(reference_data_set.vapor_pressures[:, 1]),
-                numpy.mean(reference_data_set.surface_tensions[:, 1]),
-            ]
-        )
+        self._data_shifts = {
+            "liquid_density": numpy.mean(reference_data_set.liquid_densities[:, 1]),
+            "vapor_pressure": numpy.mean(reference_data_set.vapor_pressures[:, 1]),
+            "surface_tension": numpy.mean(reference_data_set.surface_tensions[:, 1]),
+        }
 
         # Normalize the target experimental data
-        self._reference_data = [
-            reference_data_set.liquid_densities.copy(),
-            reference_data_set.vapor_pressures.copy(),
-            reference_data_set.surface_tensions.copy(),
-        ]
+        self._reference_data = {
+            "liquid_density": reference_data_set.liquid_densities.copy(),
+            "vapor_pressure": reference_data_set.vapor_pressures.copy(),
+            "surface_tension": reference_data_set.surface_tensions.copy(),
+        }
 
-        for index, reference_data in enumerate(self._reference_data):
+        for label, reference_data in self._reference_data.items():
+
             # Normalize the observed values.
-            reference_data[:, 1] -= self._data_shifts[index]
-            reference_data[:, 1] /= self._data_scales[index]
+            reference_data[:, 1] -= self._data_shifts[label]
+            reference_data[:, 1] /= self._data_scales[label]
 
             # Normalize the uncertainties.
-            reference_data[:, 2] /= self._data_scales[index]
+            reference_data[:, 2] /= self._data_scales[label]
 
     def _simulate_properties(self, parameters, temperatures):
         """A black-box function which 'runs' simulations using the model
@@ -128,19 +125,37 @@ class BaseKernel(abc.ABC):
 
         Returns
         -------
-        numpy.ndarray
-            The values of the 'simulated' liquid density evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the 'simulated' vapor pressure evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the 'simulated' surface tension evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray
+            The values of the properties evaluated by this model using the
+            specified parameters. Each array has a shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray
+            The uncertainties in the values of the properties evaluated by this model
+            using the specified parameters. Each array has a shape=(n_temperatures, 1)).
         """
         return self._analytical_model.evaluate(parameters, temperatures)
 
     def _evaluate_model(self, parameters, temperatures):
+        """Evaluates the model at a specified set of parameters and
+        temperature. If the surrogate model cannot be evaluated with
+        sufficient accuracy, a new 'simulation' (or set of simulations)
+        is run and the model retrained.
+
+        Parameters
+        ----------
+        parameters: numpy.ndarray
+            The parameters to simulate at.
+        temperatures: numpy.ndarray
+            The temperatures to simulate at.
+
+        Returns
+        -------
+        dict of str and numpy.ndarray
+            The values of the properties evaluated by this model using the
+            specified parameters. Each array has a shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray
+            The uncertainties in the values of the properties evaluated by this model
+            using the specified parameters. Each array has a shape=(n_temperatures, 1)).
+        """
 
         # # TODO: Once uncertainties are added perform check whether to re-simulate
         # #       and retrain the GP.
@@ -161,11 +176,11 @@ class BaseKernel(abc.ABC):
 
         # Evaluate the trained model.
         # if use_simulation:
-        observations = [*self._simulate_properties(parameters, temperatures)]
+        values, uncertainties = self._simulate_properties(parameters, temperatures)
         # else:
         #     observations = [*self._model.evaluate(parameters, temperatures)]
 
-        return observations
+        return values, uncertainties
 
     @abc.abstractmethod
     def _step(self, current_iteration, current_parameters):
