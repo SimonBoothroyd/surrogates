@@ -39,16 +39,16 @@ def small_data_set():
 
 def test_gradient_descent(small_data_set):
 
-    model = StollWerthSurrogate(small_data_set.molecular_weight)
+    model = StollWerthSurrogate(
+        small_data_set.molecular_weight, small_data_set.bond_length
+    )
 
     # Define the initial epsilon (kJ / mol), sigma (nm), L (nm) and Q
     # parameters of our two center Lennard-Jones model.
-    initial_parameters = numpy.array(
-        [100, 0.36, small_data_set.bond_length / 10.0, 0.0]
-    )
+    initial_parameters = numpy.array([100, 0.36])
 
     # Define a set of learning rates for each of the different parameters
-    learning_rates = numpy.array([4.0, 0.0005, 0.0, 0.0])
+    learning_rates = numpy.array([4.0, 0.0005])
 
     # Set up an array to monitor the parameter traces and the cost function
     # trace.

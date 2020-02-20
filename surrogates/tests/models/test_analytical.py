@@ -31,8 +31,6 @@ def generate_parameters():
 
 def test_critical_temperature():
 
-    model = StollWerthSurrogate(30.069)
-
     (
         epsilon,
         sigma,
@@ -41,6 +39,8 @@ def test_critical_temperature():
         quadrupole,
         quadrupole_star_sqr,
     ) = generate_parameters()
+
+    model = StollWerthSurrogate(30.069, bond_length)
 
     value = model.critical_temperature(epsilon, sigma, bond_length, quadrupole)
     assert numpy.isclose(value, 310.99575)
@@ -48,8 +48,6 @@ def test_critical_temperature():
 
 def test_liquid_density():
 
-    model = StollWerthSurrogate(30.069)
-
     (
         epsilon,
         sigma,
@@ -59,18 +57,16 @@ def test_liquid_density():
         quadrupole_star_sqr,
     ) = generate_parameters()
 
+    model = StollWerthSurrogate(30.069, bond_length)
+
     temperatures = numpy.array([308.0])
 
-    value = model.liquid_density(
-        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
-    )
+    value = model.liquid_density(numpy.array([epsilon, sigma]), temperatures)
     assert numpy.isclose(value, 285.1592692)
 
 
 def test_vapor_pressure():
 
-    model = StollWerthSurrogate(30.069)  # C2H6
-
     (
         epsilon,
         sigma,
@@ -80,18 +76,16 @@ def test_vapor_pressure():
         quadrupole_star_sqr,
     ) = generate_parameters()
 
+    model = StollWerthSurrogate(30.069, bond_length)
+
     temperatures = numpy.array([308.0])
 
-    value = model.vapor_pressure(
-        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
-    )
+    value = model.vapor_pressure(numpy.array([epsilon, sigma]), temperatures)
     assert numpy.isclose(value, 5027.57796073)
 
 
 def test_surface_tension():
 
-    model = StollWerthSurrogate(30.069)
-
     (
         epsilon,
         sigma,
@@ -101,20 +95,21 @@ def test_surface_tension():
         quadrupole_star_sqr,
     ) = generate_parameters()
 
+    model = StollWerthSurrogate(30.069, bond_length)
+
     temperatures = numpy.array([308.0])
 
-    value = model.surface_tension(
-        numpy.array([epsilon, sigma, bond_length, quadrupole]), temperatures
-    )
+    value = model.surface_tension(numpy.array([epsilon, sigma]), temperatures)
     assert numpy.isclose(value, 0.00017652)
 
 
 def test_evaluate():
 
-    model = StollWerthSurrogate(30.069)
     epsilon, sigma, bond_length, _, quadrupole, _ = generate_parameters()
 
-    parameters = numpy.array([epsilon, sigma, bond_length, quadrupole])
+    model = StollWerthSurrogate(30.069, bond_length)
+
+    parameters = numpy.array([epsilon, sigma])
     temperatures = numpy.array([298.0, 300.0, 308.0])
 
     values, uncertainties, _ = model.evaluate(parameters, temperatures)
