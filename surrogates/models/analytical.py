@@ -554,8 +554,23 @@ class StollWerthSurrogate(Model):
 
     def evaluate(self, parameters, temperatures):
 
-        return (
-            self.liquid_density(parameters, temperatures).reshape(-1, 1),
-            self.vapor_pressure(parameters, temperatures).reshape(-1, 1),
-            self.surface_tension(parameters, temperatures).reshape(-1, 1),
-        )
+        values = {
+            "liquid_density": self.liquid_density(parameters, temperatures).reshape(
+                -1, 1
+            ),
+            "vapor_pressure": self.vapor_pressure(parameters, temperatures).reshape(
+                -1, 1
+            ),
+            "surface_tension": self.surface_tension(parameters, temperatures).reshape(
+                -1, 1
+            ),
+        }
+
+        # TODO: Add the option to simulate uncertainties here.
+        uncertainties = {
+            "liquid_density": numpy.zeros(values["liquid_density"].shape),
+            "vapor_pressure": numpy.zeros(values["vapor_pressure"].shape),
+            "surface_tension": numpy.zeros(values["surface_tension"].shape),
+        }
+
+        return values, uncertainties

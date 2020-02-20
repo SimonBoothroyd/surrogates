@@ -22,15 +22,12 @@ class Model(abc.ABC):
 
         Returns
         -------
-        numpy.ndarray
-            The values of the liquid density evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the vapor pressure evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the surface tension evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray
+            The values of the properties evaluated by this model using the
+            specified parameters. Each array has a shape=(n_temperatures, 1)).
+        dict of str and numpy.ndarray
+            The uncertainties in the values of the properties evaluated by this model
+            using the specified parameters. Each array has a shape=(n_temperatures, 1)).
         """
         raise NotImplementedError()
 
@@ -39,32 +36,6 @@ class TrainableModel(Model, abc.ABC):
     """A model which can be trained upon previously generated data,
     and then be more rapidly evaluated than generating fresh data.
     """
-
-    def evaluate(self, parameters, temperatures):
-        """Evaluate this model for a set of parameters.
-
-        Parameters
-        ----------
-        parameters: numpy.ndarray
-            The values of the parameters to evaluate at with
-            shape=(n parameters, 1).
-        temperatures: numpy.ndarray
-            The temperatures to evaluate the properties at with
-            shape=(n_temperatures).
-
-        Returns
-        -------
-        numpy.ndarray
-            The values of the liquid density evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the vapor pressure evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        numpy.ndarray
-            The values of the surface tension evaluated at each temperature
-            and using the specified parameters (shape=(n_temperatures, 1)).
-        """
-        raise NotImplementedError()
 
     @abc.abstractmethod
     def add_training_point(
@@ -76,7 +47,7 @@ class TrainableModel(Model, abc.ABC):
         ----------
         parameter: numpy.ndarray
             The parameters the measurements were made at.
-        temperature: numpy.ndarray
+        temperature: float
             The temperature the measurements were recorded at.
         numpy.ndarray
             The value of the liquid density evaluated at the temperature

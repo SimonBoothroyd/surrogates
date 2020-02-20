@@ -47,20 +47,21 @@ class GradientDescent(BaseKernel):
             The temperatures to evaluate the cost function at.
         """
 
-        observations = self._evaluate_model(parameters, temperatures)
+        values, _ = self._evaluate_model(parameters, temperatures)
 
         # Normalize the observed data and gradients.
         cost_function = 0.0
         total_observables = 0.0
 
-        for index in range(len(observations)):
-            observations[index] -= self._data_shifts[index]
-            observations[index] /= self._data_scales[index]
+        for label in values:
 
-            differences = observations[index] - self._reference_data[index][:, 1]
+            values[label] -= self._data_shifts[label]
+            values[label] /= self._data_scales[label]
+
+            differences = values[label] - self._reference_data[label][:, 1]
 
             cost_function += numpy.sum(differences ** 2)
-            total_observables += len(observations[index])
+            total_observables += len(values[label])
 
         cost_function /= 2.0 * total_observables
 
