@@ -1,9 +1,7 @@
-import numpy
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel
+import gpytorch
+import torch
 
 from surrogates.models import TrainableModel
-from surrogates.utils.gradients import finite_difference
 
 
 class GaussianProcessModel(TrainableModel):
@@ -12,143 +10,165 @@ class GaussianProcessModel(TrainableModel):
     fly.
     """
 
-    def __init__(
-        self,
-        initial_variance=1.0,
-        minimum_variance=1.0e-3,
-        maximum_variance=1.0e3,
-        initial_length_scale=1.0,
-        minimum_length_scale=1.0e-3,
-        maximum_length_scale=1.0e3,
-    ):
+    class _ExactGPModel(gpytorch.models.ExactGP):
+        def __init__(self, train_x, train_y, likelihood):
 
-        self._temperature = None
-        self._parameter_dimension = None
-
-        self._variance_inputs = (initial_variance, (minimum_variance, maximum_variance))
-
-        self._length_scale_inputs = (
-            initial_length_scale,
-            (minimum_length_scale, maximum_length_scale),
-        )
-
-        self._training_parameters = numpy.zeros(0)
-        self._training_observables = [numpy.zeros(0), numpy.zeros(0), numpy.zeros(0)]
-
-        self._gaussian_processes = []
-
-    def add_training_point(
-        self, parameter, temperature, liquid_density, vapor_pressure, surface_tension
-    ):
-
-        if self._temperature is None:
-            self._temperature = temperature
-
-        if temperature != self._temperature:
-            raise NotImplementedError()
-
-        if self._parameter_dimension is None:
-            self._parameter_dimension = len(parameter)
-
-        if self._parameter_dimension != len(parameter):
-
-            raise ValueError(
-                f"The parameter must be of length {self._parameter_dimension}"
+            super(GaussianProcessModel._ExactGPModel, self).__init__(
+                train_x, train_y, likelihood
             )
 
-        training_parameters = [*self._training_parameters, parameter]
+            self.mean_module = gpytorch.means.ConstantMean()
+            self.covar_module = gpytorch.kernels.ScaleKernel(
+                gpytorch.kernels.RBFKernel()
+            )
 
-        training_observables = [
-            [*self._training_observables[0], liquid_density],
-            [*self._training_observables[1], vapor_pressure],
-            [*self._training_observables[2], surface_tension],
-        ]
+        def forward(self, x):
 
-        self._training_parameters = numpy.array(training_parameters)
+            mean_x = self.mean_module(x)
+            covar_x = self.covar_module(x)
 
-        self._training_observables = [
-            numpy.array(training_observables[0]),
-            numpy.array(training_observables[1]),
-            numpy.array(training_observables[2]),
-        ]
+            return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
+
+    def __init__(
+        self,
+        priors,
+        fixed_parameters,
+        condition_parameters,
+        condition_data,
+        learning_rate=0.1,
+        train_iterations=200,
+    ):
+
+        super(GaussianProcessModel, self).__init__(
+            priors, fixed_parameters, condition_parameters, condition_data
+        )
+
+        self._models = {}
+        self._likelihoods = {}
+
+        self._learning_rate = learning_rate
+        self._train_iterations = train_iterations
+
+    def _validate_training_data(self, parameters, values, uncertainties):
+
+        super(GaussianProcessModel, self)._validate_training_data(
+            parameters, values, uncertainties
+        )
+
+        # Make sure we are training upon the same data if we have already trained
+        # at least once.
+        if len(self._models) == 0:
+            return
+
+        if not all(x in self._models for x in values) or not all(
+            x in values for x in self._models
+        ):
+
+            raise ValueError(
+                "The data types to train on do not match the data type the model has "
+                "already been trained upon."
+            )
+
+    def add_training_data(self, parameters, values, uncertainties):
+
+        super(GaussianProcessModel, self).add_training_data(
+            parameters, values, uncertainties
+        )
 
         self._retrain()
 
     def _retrain(self):
-        """
+        """Re-train the models hyperparameters based on the currently available
+        training data.
 
         Notes
         -----
         This function is based in the version found in a scikit-learn tutorial:
         https://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_noisy_targets.html
-
-        Returns
-        -------
-
         """
-        self._gaussian_processes = []
 
-        for observables in self._training_observables:
+        self._models = {}
+        self._likelihoods = {}
 
-            # Instantiate a Gaussian Process model
-            kernel = ConstantKernel(*self._variance_inputs) * RBF(
-                *self._length_scale_inputs
+        for label, values in self._training_values.items():
+
+            values = values.reshape((-1,))
+            noise = self._training_uncertainties[label].reshape((-1,))
+
+            # Initialize likelihood and model
+            likelihood = gpytorch.likelihoods.FixedNoiseGaussianLikelihood(noise, False)
+            model = self._ExactGPModel(self._training_parameters, values, likelihood)
+
+            # Find optimal model hyperparameters
+            model.train()
+            likelihood.train()
+
+            # Use the adam optimizer
+            optimizer = torch.optim.Adam(
+                [{"params": model.parameters()}], lr=self._learning_rate
             )
-            gaussian_process = GaussianProcessRegressor(
-                kernel=kernel, n_restarts_optimizer=9, normalize_y=True
-            )
 
-            # Fit to data using Maximum Likelihood Estimation of the parameters
-            gaussian_process.fit(self._training_parameters, observables)
+            # "Loss" for GPs - the marginal log likelihood
+            mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
-            self._gaussian_processes.append(gaussian_process)
+            for i in range(self._train_iterations):
 
-    def evaluate(self, parameters, temperatures, calculate_gradients=False):
+                # Zero gradients from previous iteration
+                optimizer.zero_grad()
 
-        if len(self._gaussian_processes) == 0:
+                # Output from model
+                output = model(self._training_parameters)
+
+                # Calc loss and backprop gradients
+                loss = -mll(output, values)
+                loss.backward()
+
+                print(
+                    "Iter %d/%d - Loss: %.5f   lengthscale: %.5f   outputscale: %.5f"
+                    % (
+                        i + 1,
+                        self._train_iterations,
+                        loss.item(),
+                        model.covar_module.base_kernel.lengthscale.item(),
+                        model.covar_module.outputscale.item(),
+                        # model.likelihood.noise.item(),
+                    )
+                )
+
+                optimizer.step()
+
+            # Get into evaluation (predictive posterior) mode
+            model.eval()
+            likelihood.eval()
+
+            self._models[label] = model
+            self._likelihoods[label] = likelihood
+
+    def evaluate(self, parameters):
+
+        if len(self._models) == 0:
             raise ValueError("The model has not yet been trained upon any data.")
 
-        if self._temperature not in temperatures:
-            raise NotImplementedError()
+        parameters = torch.from_numpy(parameters)
+        parameters = (parameters - self._parameter_shift) / self._parameter_scale
 
-        liquid_density, liquid_density_std = self._gaussian_processes[0].predict(
-            parameters.reshape(1, -1), return_std=True
-        )
-        vapor_pressure, vapor_pressure_std = self._gaussian_processes[1].predict(
-            parameters.reshape(1, -1), return_std=True
-        )
-        surface_tension, surface_tension_std = self._gaussian_processes[2].predict(
-            parameters.reshape(1, -1), return_std=True
-        )
+        values = {}
+        uncertainties = {}
 
-        values = {
-            "liquid_density": liquid_density.reshape(-1, 1),
-            "vapor_pressure": vapor_pressure.reshape(-1, 1),
-            "surface_tension": surface_tension.reshape(-1, 1),
-        }
+        for label in self._models:
 
-        uncertainties = {
-            "liquid_density": liquid_density_std.reshape(-1, 1),
-            "vapor_pressure": vapor_pressure_std.reshape(-1, 1),
-            "surface_tension": surface_tension_std.reshape(-1, 1),
-        }
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                prediction = self._likelihoods[label](self._models[label](parameters))
 
-        gradients = None
+                values[label] = (
+                    prediction.mean * self._value_scales[label]
+                    + self._value_shifts[label]
+                ).numpy()
+                uncertainties[label] = (
+                    prediction.stddev * self._value_scales[label]
+                ).numpy()
 
-        if calculate_gradients:
+        return values, uncertainties
 
-            # TODO: In future this should be replaced with the actual derivatives of
-            #       the Gaussian Process.
-            gradients = {
-                "liquid_density": finite_difference(
-                    self._gaussian_processes[0].predict, parameters.reshape(1, -1)
-                ).reshape(1, -1),
-                "vapor_pressure": finite_difference(
-                    self._gaussian_processes[1].predict, parameters.reshape(1, -1)
-                ).reshape(1, -1),
-                "surface_tension": finite_difference(
-                    self._gaussian_processes[2].predict, parameters.reshape(1, -1)
-                ).reshape(1, -1),
-            }
-
-        return values, uncertainties, gradients
+    def evaluate_log_likelihood(self, parameters):
+        raise NotImplementedError

@@ -1,4 +1,6 @@
 channels:
+  - gpytorch
+  - pytorch
   - conda-forge
 dependencies:
     # Base depends
@@ -18,6 +20,9 @@ dependencies:
   - pandas
   - pydantic
   - pymbar
-  - scikit-learn
   - tqdm
   - pyyaml
+
+    # Gaussian Processes
+  - pytorch
+  - gpytorch
