@@ -6,7 +6,7 @@ from pkg_resources import resource_filename
 
 from surrogates.datasets import DataSet
 from surrogates.kernels.optimization import GradientDescent
-from surrogates.models.analytical import StollWerthSurrogate
+from surrogates.models.analytical import StollWerthModel
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def small_data_set():
 @pytest.mark.xfail
 def test_gradient_descent(small_data_set):
 
-    model = StollWerthSurrogate(
+    model = StollWerthModel(
         fixed_parameters={"L": small_data_set.bond_length, "Q": 0.0},
         molecular_weight=small_data_set.molecular_weight,
     )

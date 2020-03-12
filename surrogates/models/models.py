@@ -67,21 +67,25 @@ class Model(abc.ABC):
             self._fixed_labels.append(parameter_name)
 
     @abc.abstractmethod
-    def evaluate(self, parameters):
+    def evaluate(self, properties, parameters):
         """Evaluate the model at the specified (trainable) parameters
 
         Parameters
         ----------
+        properties: list of str
+            The properties which this model should evaluate.
         parameters: numpy.ndarray
             The parameters to evaluate the model at with
-            shape=(..., n_trainable_parameters).
+            shape=(n_sets, n_trainable_parameters).
 
         Returns
         -------
         dict of str and numpy.ndarray
-            The values produced by the model.
+            The values produced by the model, where each array
+            as shape=(n_sets,).
         dict of str and numpy.ndarray
-            The uncertainties in the values.
+            The uncertainties in the values, where each array
+            as shape=(n_sets,).
         """
         raise NotImplementedError()
 
@@ -104,9 +108,6 @@ class BayesianModel(Model, abc.ABC):
             The priors distributions to place on each parameter, whose keys
             are the friendly name of the parameter associated with the prior.
             There should be one entry per trainable parameter.
-        fixed_parameters: dict of str and float
-            The values of the fixed model parameters, whose keys of the name
-            associated with the parameter.
         """
         self._priors = []
         trainable_labels = []
@@ -184,42 +185,6 @@ class BayesianModel(Model, abc.ABC):
             counter += prior.n_variables
 
         return log_prior
-
-    def evaluate_log_likelihood(self, parameters):
-        """Evaluates the log value of the this models likelihood for
-        a set of parameters.
-
-        Parameters
-        ----------
-        parameters: numpy.ndarray
-            The values of the parameters (with shape=n_parameters)
-            to evaluate at.
-
-        Returns
-        -------
-        float
-            The log value of the likelihood evaluated at `parameters`.
-        """
-        raise NotImplementedError()
-
-    def evaluate_log_posterior(self, parameters):
-        """Evaluates the *unnormalized* log posterior for
-        a set of parameters.
-
-        Parameters
-        ----------
-        parameters: numpy.ndarray
-            The values of the parameters (with shape=n_parameters)
-            to evaluate at.
-
-        Returns
-        -------
-        float
-            The log value of the posterior evaluated at `parameters`.
-        """
-        return self.evaluate_log_prior(parameters) + self.evaluate_log_likelihood(
-            parameters
-        )
 
     def plot_trace(self, trace, show=False):
         """Use `Arviz` to plot a trace of the trainable parameters,
@@ -341,7 +306,9 @@ class TrainableModel(BayesianModel, abc.ABC):
     and then be more rapidly evaluated than generating fresh data.
     """
 
-    def __init__(self, priors, fixed_parameters, condition_parameters, condition_data):
+    def __init__(
+        self, priors, fixed_parameters, condition_parameters, condition_data,
+    ):
         """
         Parameters
         ----------
