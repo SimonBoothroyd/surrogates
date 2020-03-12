@@ -1,4 +1,3 @@
-import functools
 import os
 
 import numpy
@@ -6,7 +5,6 @@ import yaml
 from pkg_resources import resource_filename
 
 from surrogates.models import Model
-from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthSurrogate(Model):
@@ -18,7 +16,9 @@ class StollWerthSurrogate(Model):
     _reduced_boltzmann = 1.38065
     _reduced_D_to_sqrt_J_m3 = 3.1623
 
-    def __init__(self, molecular_weight, bond_length, file_path=None):
+    def __init__(
+        self, fixed_parameters, molecular_weight, file_path=None,
+    ):
         """
         Parameters
         ----------
@@ -30,8 +30,21 @@ class StollWerthSurrogate(Model):
             `DCLJQ.yaml` parameters will be used.
         """
 
+        required_parameters = {"epsilon", "sigma", "L", "Q", "temperature"}
+        provided_parameters = {*fixed_parameters.keys()}
+
+        assert all(x in required_parameters for x in provided_parameters)
+
+        trainable_parameters = ["epsilon", "sigma", "L", "Q", "temperature"]
+
+        for provided_parameter in provided_parameters:
+            trainable_parameters.remove(provided_parameter)
+
+        super(StollWerthSurrogate, self).__init__(
+            trainable_parameters, fixed_parameters
+        )
+
         self.molecular_weight = molecular_weight
-        self.bond_length = bond_length
 
         if file_path is None:
 
@@ -158,7 +171,7 @@ class StollWerthSurrogate(Model):
 
         return a + b + c + d + e
 
-    def critical_temperature_star(self, quadrupole_star_sqr, bond_length_star):
+    def _critical_temperature_star(self, quadrupole_star_sqr, bond_length_star):
         """Computes the reduced critical temperature of the two-center
         Lennard-Jones model for a given set of model parameters.
 
@@ -194,7 +207,7 @@ class StollWerthSurrogate(Model):
 
         return t_c_star
 
-    def critical_temperature(self, epsilon, sigma, bond_length, quadrupole):
+    def _critical_temperature(self, epsilon, sigma, bond_length, quadrupole):
         """Computes the critical temperature of the two-center
         Lennard-Jones model for a given set of model parameters.
 
@@ -219,14 +232,14 @@ class StollWerthSurrogate(Model):
         )
         bond_length_star = bond_length / sigma
 
-        critical_temperature_star = self.critical_temperature_star(
+        critical_temperature_star = self._critical_temperature_star(
             quadrupole_star_sqr, bond_length_star
         )
         critical_temperature = critical_temperature_star * epsilon
 
         return critical_temperature
 
-    def critical_density_star(self, quadrupole_star, bond_length_star):
+    def _critical_density_star(self, quadrupole_star, bond_length_star):
         """Computes the reduced critical density of the two-center
         Lennard-Jones model for a given set of model parameters.
 
@@ -262,7 +275,7 @@ class StollWerthSurrogate(Model):
 
         return rho_c_star
 
-    def critical_density(self, epsilon, sigma, bond_length, quadrupole):
+    def _critical_density(self, epsilon, sigma, bond_length, quadrupole):
         """Computes the critical density of the two-center Lennard-Jones
         model for a given set of model parameters.
 
@@ -290,11 +303,11 @@ class StollWerthSurrogate(Model):
         )
         bond_length_star = bond_length / sigma
 
-        rho_star = self.critical_density_star(quadrupole_star_sqr, bond_length_star)
+        rho_star = self._critical_density_star(quadrupole_star_sqr, bond_length_star)
         rho = rho_star * molecular_weight / sigma ** 3 / 6.02214 * 10.0
         return rho  # [kg/m3]
 
-    def liquid_density_star(self, temperature_star, quadrupole_star, bond_length_star):
+    def _liquid_density_star(self, temperature_star, quadrupole_star, bond_length_star):
         """Computes the reduced liquid density of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
@@ -320,8 +333,8 @@ class StollWerthSurrogate(Model):
             self._b_C3_L,
         )
 
-        t_c_star = self.critical_temperature_star(quadrupole_star, bond_length_star)
-        rho_c_star = self.critical_density_star(quadrupole_star, bond_length_star)
+        t_c_star = self._critical_temperature_star(quadrupole_star, bond_length_star)
+        rho_c_star = self._critical_density_star(quadrupole_star, bond_length_star)
 
         tau = t_c_star - temperature_star
 
@@ -349,7 +362,7 @@ class StollWerthSurrogate(Model):
 
         return rho_star
 
-    def liquid_density(self, parameters, temperature):
+    def _liquid_density(self, parameters, temperature):
         """Computes the liquid density of the two-center Lennard-Jones
         model for a given set of model parameters over a specified range
         of temperatures.
@@ -368,8 +381,7 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
-        epsilon, sigma = parameters
-        quadrupole = 0.0
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         molecular_weight = self.molecular_weight
 
@@ -379,15 +391,15 @@ class StollWerthSurrogate(Model):
         quadrupole_star_sqr = (quadrupole * self._reduced_D_to_sqrt_J_m3) ** 2 / (
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
-        bond_length_star = self.bond_length / sigma
+        bond_length_star = bond_length / sigma
 
-        rho_star = self.liquid_density_star(
+        rho_star = self._liquid_density_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
         )
         rho = rho_star * molecular_weight / sigma ** 3 / 6.02214 * 10.0
         return rho  # [kg/m3]
 
-    def vapor_pressure_star(self, temperature_star, quadrupole_star, bond_length_star):
+    def _vapor_pressure_star(self, temperature_star, quadrupole_star, bond_length_star):
         """Computes the reduced saturation pressure of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
@@ -441,7 +453,7 @@ class StollWerthSurrogate(Model):
         )
         return vapor_pressure_star
 
-    def vapor_pressure(self, parameters, temperature):
+    def _vapor_pressure(self, parameters, temperature):
         """Computes the saturation pressure of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
@@ -459,17 +471,16 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated saturation pressures in units of kPa
         """
-        epsilon, sigma = parameters
-        quadrupole = 0.0
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         temperature_star = temperature / epsilon
 
         quadrupole_star_sqr = (quadrupole * self._reduced_D_to_sqrt_J_m3) ** 2 / (
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
-        bond_length_star = self.bond_length / sigma
+        bond_length_star = bond_length / sigma
 
-        vapor_pressure_star = self.vapor_pressure_star(
+        vapor_pressure_star = self._vapor_pressure_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
         )
         vapor_pressure = (
@@ -477,7 +488,9 @@ class StollWerthSurrogate(Model):
         )
         return vapor_pressure  # [kPa]
 
-    def surface_tension_star(self, temperature_star, quadrupole_star, bond_length_star):
+    def _surface_tension_star(
+        self, temperature_star, quadrupole_star, bond_length_star
+    ):
         """Computes the reduced surface tension of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
@@ -498,7 +511,7 @@ class StollWerthSurrogate(Model):
         """
         _B = self._B
 
-        t_c_star = self.critical_temperature_star(quadrupole_star, bond_length_star)
+        t_c_star = self._critical_temperature_star(quadrupole_star, bond_length_star)
         _a_correlation = self._a_correlation_function(quadrupole_star, bond_length_star)
 
         if any(temperature_star / t_c_star > 1.0):
@@ -509,7 +522,7 @@ class StollWerthSurrogate(Model):
         )
         return surface_tension_star
 
-    def surface_tension(self, parameters, temperature):
+    def _surface_tension(self, parameters, temperature):
         """Computes the surface tension of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
@@ -528,8 +541,7 @@ class StollWerthSurrogate(Model):
         numpy.ndarray
             The evaluated surface tensions in units of J / m^2
         """
-        epsilon, sigma = parameters
-        quadrupole = 0.0
+        epsilon, sigma, bond_length, quadrupole = parameters
 
         # Note that epsilon is defined as epsilon/kB
         temperature_star = temperature / epsilon
@@ -538,9 +550,9 @@ class StollWerthSurrogate(Model):
             epsilon * self._reduced_boltzmann * sigma ** 5
         )
 
-        bond_length_star = self.bond_length / sigma
+        bond_length_star = bond_length / sigma
 
-        surface_tension_star = self.surface_tension_star(
+        surface_tension_star = self._surface_tension_star(
             temperature_star, quadrupole_star_sqr, bond_length_star
         )
         surface_tension = (
@@ -552,18 +564,38 @@ class StollWerthSurrogate(Model):
         )
         return surface_tension  # [J/m2]
 
-    def evaluate(self, parameters, temperatures, calculate_gradients=False):
+    def evaluate(self, parameters):
+
+        assert parameters.ndim == 2
+        assert parameters.shape[1] == self.n_trainable_parameters
+
+        all_parameters = {
+            x: numpy.array([y] * parameters.shape[0])
+            for x, y in zip(self._fixed_labels, self._fixed_parameters)
+        }
+        all_parameters.update(
+            {x: y for x, y in zip(self._trainable_labels, parameters.T)}
+        )
+
+        parameters = numpy.array(
+            [
+                [*all_parameters["epsilon"]],
+                [*all_parameters["sigma"]],
+                [*all_parameters["L"]],
+                [*all_parameters["Q"]],
+            ]
+        )
 
         values = {
-            "liquid_density": self.liquid_density(parameters, temperatures).reshape(
-                -1, 1
-            ),
-            "vapor_pressure": self.vapor_pressure(parameters, temperatures).reshape(
-                -1, 1
-            ),
-            "surface_tension": self.surface_tension(parameters, temperatures).reshape(
-                -1, 1
-            ),
+            "liquid_density": self._liquid_density(
+                parameters, all_parameters["temperature"]
+            ).reshape(-1, 1),
+            "vapor_pressure": self._vapor_pressure(
+                parameters, all_parameters["temperature"]
+            ).reshape(-1, 1),
+            "surface_tension": self._surface_tension(
+                parameters, all_parameters["temperature"]
+            ).reshape(-1, 1),
         }
 
         # TODO: Add the option to simulate uncertainties here.
@@ -573,23 +605,4 @@ class StollWerthSurrogate(Model):
             "surface_tension": numpy.zeros(values["surface_tension"].shape),
         }
 
-        gradients = None
-
-        if calculate_gradients:
-
-            gradients = {
-                "liquid_density": finite_difference(
-                    functools.partial(self.liquid_density, temperature=temperatures),
-                    parameters,
-                ).reshape(1, -1),
-                "vapor_pressure": finite_difference(
-                    functools.partial(self.vapor_pressure, temperature=temperatures),
-                    parameters,
-                ).reshape(1, -1),
-                "surface_tension": finite_difference(
-                    functools.partial(self.surface_tension, temperature=temperatures),
-                    parameters,
-                ).reshape(1, -1),
-            }
-
-        return values, uncertainties, gradients
+        return values, uncertainties
