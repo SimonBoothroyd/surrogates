@@ -37,6 +37,7 @@ def small_data_set():
     return data_set
 
 
+@pytest.mark.xfail
 def test_gradient_descent(small_data_set):
 
     model = StollWerthSurrogate(
