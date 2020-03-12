@@ -5,7 +5,7 @@ import arviz
 import numpy
 from tqdm import tqdm
 
-from surrogates.models.analytical import StollWerthSurrogate
+from surrogates.models.analytical import StollWerthModel
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ class BaseKernel(abc.ABC):
         # Construct an analytical Stoll-Werth surrogate model. This will
         # serve as a surrogate stand-in for the openff-evaluator, being
         # used to generate 'simulation results' rapidly.
-        self._analytical_model = StollWerthSurrogate(
+        self._analytical_model = StollWerthModel(
             reference_data_set.molecular_weight, reference_data_set.bond_length / 10.0
         )
 

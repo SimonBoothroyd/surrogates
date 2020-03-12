@@ -40,7 +40,7 @@ class GaussianProcessModel(TrainableModel):
     ):
 
         super(GaussianProcessModel, self).__init__(
-            priors, fixed_parameters, condition_parameters, condition_data
+            priors, fixed_parameters, condition_parameters, condition_data,
         )
 
         self._models = {}
@@ -144,7 +144,7 @@ class GaussianProcessModel(TrainableModel):
             self._models[label] = model
             self._likelihoods[label] = likelihood
 
-    def evaluate(self, parameters):
+    def evaluate(self, properties, parameters):
 
         if len(self._models) == 0:
             raise ValueError("The model has not yet been trained upon any data.")
@@ -155,20 +155,19 @@ class GaussianProcessModel(TrainableModel):
         values = {}
         uncertainties = {}
 
-        for label in self._models:
+        for property_type in properties:
 
             with torch.no_grad(), gpytorch.settings.fast_pred_var():
-                prediction = self._likelihoods[label](self._models[label](parameters))
+                prediction = self._likelihoods[property_type](
+                    self._models[property_type](parameters)
+                )
 
-                values[label] = (
-                    prediction.mean * self._value_scales[label]
-                    + self._value_shifts[label]
+                values[property_type] = (
+                    prediction.mean * self._value_scales[property_type]
+                    + self._value_shifts[property_type]
                 ).numpy()
-                uncertainties[label] = (
-                    prediction.stddev * self._value_scales[label]
+                uncertainties[property_type] = (
+                    prediction.stddev * self._value_scales[property_type]
                 ).numpy()
 
         return values, uncertainties
-
-    def evaluate_log_likelihood(self, parameters):
-        raise NotImplementedError

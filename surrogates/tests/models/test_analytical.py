@@ -4,7 +4,7 @@ Unit and regression test for the datasets module.
 import numpy
 import pytest
 
-from surrogates.models.analytical import StollWerthSurrogate
+from surrogates.models.analytical import StollWerthModel
 
 
 @pytest.fixture
@@ -31,25 +31,6 @@ def default_parameters():
     )
 
 
-def test_critical_temperature(default_parameters):
-
-    (
-        epsilon,
-        sigma,
-        bond_length,
-        bond_length_star,
-        quadrupole,
-        quadrupole_star_sqr,
-    ) = default_parameters
-
-    model = StollWerthSurrogate(
-        fixed_parameters={"temperature": 0.0}, molecular_weight=30.069
-    )
-
-    value = model._critical_temperature(epsilon, sigma, bond_length, quadrupole)
-    assert numpy.isclose(value, 310.99575)
-
-
 def test_evaluate(default_parameters):
 
     (
@@ -61,12 +42,15 @@ def test_evaluate(default_parameters):
         quadrupole_star_sqr,
     ) = default_parameters
 
-    model = StollWerthSurrogate(
+    model = StollWerthModel(
         fixed_parameters={"L": bond_length, "Q": quadrupole, "temperature": 308.0},
         molecular_weight=30.069,
     )
 
-    values, _ = model.evaluate(numpy.array([[epsilon, sigma]]))
+    values, _ = model.evaluate(
+        ["liquid_density", "vapor_pressure", "surface_tension"],
+        numpy.array([[epsilon, sigma]]),
+    )
     assert numpy.isclose(values["liquid_density"], 285.1592692)
     assert numpy.isclose(values["vapor_pressure"], 5027.57796073)
     assert numpy.isclose(values["surface_tension"], 0.00017652)
@@ -76,15 +60,17 @@ def test_evaluate_vectorized(default_parameters):
 
     epsilon, sigma, bond_length, _, quadrupole, _ = default_parameters
 
-    model = StollWerthSurrogate(
-        fixed_parameters={"L": bond_length, "Q": quadrupole}, molecular_weight=30.069,
+    model = StollWerthModel(
+        fixed_parameters={"L": bond_length, "Q": quadrupole}, molecular_weight=30.069
     )
 
     parameters = numpy.array(
         [[epsilon, sigma, 298.0], [epsilon, sigma, 300.0], [epsilon, sigma, 308.0]]
     )
 
-    values, uncertainties = model.evaluate(parameters)
+    values, uncertainties = model.evaluate(
+        ["liquid_density", "vapor_pressure", "surface_tension"], parameters
+    )
 
     assert len(values["liquid_density"]) == len(parameters)
     assert len(values["vapor_pressure"]) == len(parameters)
