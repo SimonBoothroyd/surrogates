@@ -31,21 +31,21 @@ class DataSet(BaseModel):
         ..., description="The uncertainty in the critical temperature (K)."
     )
 
-    surface_tensions: NumpyNDArray = Field(
+    surface_tension: NumpyNDArray = Field(
         ...,
         description="The surface tension of the compound as a function of temperature."
-        "This is a (3, N) array with rows of temperature (K), value (N / m) and"
-        "the uncertainty in the value (N / m)",
+        "This is a (4, N) array with rows of temperature (K), value (N / m), experimental"
+        "uncertainty (N / m) and the correlation corrected uncertainty (N / m).",
     )
-    vapor_pressures: NumpyNDArray = Field(
+    vapor_pressure: NumpyNDArray = Field(
         ...,
         description="The vapor pressure of the compound as a function of temperature."
-        "This is a (3, N) array with rows of temperature (K), value (kPa) and"
-        "the uncertainty in the value (kPa)",
+        "This is a (4, N) array with rows of temperature (K), value (kPa), experimental"
+        "uncertainty (kPa) and the correlation corrected uncertainty (kPa).",
     )
-    liquid_densities: NumpyNDArray = Field(
+    liquid_density: NumpyNDArray = Field(
         ...,
         description="The liquid density of the compound as a function of temperature."
-        "This is a (3, N) array with rows of temperature (K), value (kg / m^3) and"
-        "the uncertainty in the value (kg / m^3)",
+        "This is a (4, N) array with rows of temperature (K), value (kg / m^3), experimental"
+        "uncertainty (kg / m^3) and the correlation corrected uncertainty (kg / m^3).",
     )
