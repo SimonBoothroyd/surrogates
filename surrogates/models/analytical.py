@@ -21,24 +21,24 @@ class StollWerthModel(Model):
 
         assert all(x in required_parameters for x in provided_parameters)
 
-        trainable_parameters = ["epsilon", "sigma", "L", "Q", "temperature"]
+        variable_parameters = ["epsilon", "sigma", "L", "Q", "temperature"]
 
         for provided_parameter in provided_parameters:
-            trainable_parameters.remove(provided_parameter)
+            variable_parameters.remove(provided_parameter)
 
-        super(StollWerthModel, self).__init__(trainable_parameters, fixed_parameters)
+        super(StollWerthModel, self).__init__(variable_parameters, fixed_parameters)
 
     def evaluate(self, properties, parameters):
 
         assert parameters.ndim == 2
-        assert parameters.shape[1] == self.n_trainable_parameters
+        assert parameters.shape[1] == self.n_variable_parameters
 
         all_parameters = {
             x: numpy.array([y] * parameters.shape[0])
             for x, y in zip(self._fixed_labels, self._fixed_parameters)
         }
         all_parameters.update(
-            {x: y for x, y in zip(self._trainable_labels, parameters.T)}
+            {x: y for x, y in zip(self._variable_labels, parameters.T)}
         )
 
         all_parameters = numpy.concatenate(

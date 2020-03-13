@@ -1,13 +1,13 @@
 import numpy
 
 from surrogates.models.trained import GaussianProcessModel
-from surrogates.utils.distributions import Uniform
 
 
 def test_gaussian_process_no_noise():
 
     model = GaussianProcessModel(
-        priors={"a": Uniform(-10, 10), "b": Uniform(-10, 10)},
+        priors={},
+        variable_parameters=["a", "b"],
         fixed_parameters={},
         condition_parameters=True,
         condition_data=True,

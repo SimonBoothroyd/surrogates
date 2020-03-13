@@ -1,10 +1,7 @@
 import abc
 
-import arviz
-import corner
 import numpy
 import torch
-from matplotlib import pyplot
 
 
 class Model(abc.ABC):
@@ -26,37 +23,37 @@ class Model(abc.ABC):
         return self._fixed_labels
 
     @property
-    def n_trainable_parameters(self):
-        """int: The number of trainable parameters within this model."""
-        return len(self._trainable_labels)
+    def n_variable_parameters(self):
+        """int: The number of variable parameters within this model."""
+        return len(self._variable_labels)
 
     @property
-    def trainable_parameter_labels(self):
+    def variable_parameter_labels(self):
         """list of str: The friendly names of the parameters which are allowed to vary."""
-        return self._trainable_labels
+        return self._variable_labels
 
     @property
     def n_total_parameters(self):
         """int: The total number of parameters within this model."""
-        return self.n_trainable_parameters + self.n_fixed_parameters
+        return self.n_variable_parameters + self.n_fixed_parameters
 
     @property
     def all_parameter_labels(self):
         """list of str: The friendly names of the parameters within this model."""
-        return self._trainable_labels + self._fixed_labels
+        return self._variable_labels + self._fixed_labels
 
-    def __init__(self, trainable_parameter_labels, fixed_parameters):
+    def __init__(self, variable_parameters, fixed_parameters):
         """
 
         Parameters
         ----------
-        trainable_parameter_labels: list of str
-            The names associated with the trainable parameters of this model.
+        variable_parameters: list of str
+            The names associated with the variable parameters of this model.
         fixed_parameters: dict of str and float
             The values of the fixed model parameters, whose keys of the name
             associated with the parameter.
         """
-        self._trainable_labels = [*trainable_parameter_labels]
+        self._variable_labels = [*variable_parameters]
 
         self._fixed_parameters = []
         self._fixed_labels = []
@@ -68,7 +65,7 @@ class Model(abc.ABC):
 
     @abc.abstractmethod
     def evaluate(self, properties, parameters):
-        """Evaluate the model at the specified (trainable) parameters
+        """Evaluate the model at the specified (variable) parameters
 
         Parameters
         ----------
@@ -76,7 +73,7 @@ class Model(abc.ABC):
             The properties which this model should evaluate.
         parameters: numpy.ndarray
             The parameters to evaluate the model at with
-            shape=(n_sets, n_trainable_parameters).
+            shape=(n_sets, n_variable_parameters).
 
         Returns
         -------
@@ -96,46 +93,69 @@ class BayesianModel(Model, abc.ABC):
 
     @property
     def priors(self):
-        """list of Distribution: The priors on each trainable parameter of
+        """dict of str and Distribution: The priors on each trainable parameter of
         this model."""
         return self._priors
 
-    def __init__(self, priors, fixed_parameters):
+    @property
+    def n_trainable_parameters(self):
+        """int: The number of trainable parameters within this model."""
+        return self._n_trainable_parameters
+
+    @property
+    def trainable_parameter_labels(self):
+        """list of str: The friendly names of the parameters which are trainable."""
+        return [*self._priors]
+
+    def __init__(self, priors, variable_parameters, fixed_parameters):
         """
         Parameters
         ----------
         priors: dict of str and Distribution
             The priors distributions to place on each parameter, whose keys
             are the friendly name of the parameter associated with the prior.
-            There should be one entry per trainable parameter.
+        variable_parameters: list of str
+            The names of any variable parameters which are not trainable (i.e
+            those parameters which may vary but do not appear in `priors`).
         """
-        self._priors = []
-        trainable_labels = []
+
+        common_parameters = set.intersection({*priors}, {*variable_parameters})
+
+        if len(common_parameters) > 0:
+
+            raise ValueError(
+                "A parameter cannot appear both in the priors list and the variable "
+                "list. A parameter having a prior already implies that it is variable."
+            )
+
+        self._n_trainable_parameters = 0
 
         for parameter_name in priors:
 
             distribution = priors[parameter_name]
-            self._priors.append(distribution)
 
             if isinstance(parameter_name, tuple):
-
-                trainable_labels.extend(parameter_name)
                 assert len(parameter_name) == distribution.n_variables
             else:
-                trainable_labels.append(parameter_name)
                 assert distribution.n_variables == 1
 
-        super(BayesianModel, self).__init__(trainable_labels, fixed_parameters)
+            self._n_trainable_parameters += distribution.n_variables
+
+        self._priors = priors
+
+        variable_parameters = [*priors, *variable_parameters]
+
+        super(BayesianModel, self).__init__(variable_parameters, fixed_parameters)
 
         common_parameters = set(self._fixed_labels).intersection(
-            set(self._trainable_labels)
+            set(self._variable_labels)
         )
 
         if len(common_parameters) > 0:
 
             raise ValueError(
                 f"The {', '.join(common_parameters)} have been flagged "
-                f"as being both fixed and trainable."
+                f"as being both fixed and variable."
             )
 
     def sample_priors(self):
@@ -152,7 +172,7 @@ class BayesianModel(Model, abc.ABC):
         initial_parameters = numpy.zeros(self.n_trainable_parameters)
         counter = 0
 
-        for prior in self._priors:
+        for prior in self._priors.values():
 
             initial_parameters[counter : counter + prior.n_variables] = prior.sample()
             counter += prior.n_variables
@@ -166,7 +186,7 @@ class BayesianModel(Model, abc.ABC):
         Parameters
         ----------
         parameters: numpy.ndarray
-            The values of the parameters (with shape=n_parameters)
+            The values of the parameters (with shape=n_variable_parameters)
             to evaluate at.
 
         Returns
@@ -177,7 +197,7 @@ class BayesianModel(Model, abc.ABC):
         log_prior = 0.0
         counter = 0
 
-        for prior in self._priors:
+        for prior in self._priors.values():
 
             log_prior += prior.log_pdf(
                 parameters[counter : counter + prior.n_variables]
@@ -186,128 +206,19 @@ class BayesianModel(Model, abc.ABC):
 
         return log_prior
 
-    def plot_trace(self, trace, show=False):
-        """Use `Arviz` to plot a trace of the trainable parameters,
-        alongside a histogram of their distribution.
 
-        Parameters
-        ----------
-        trace: numpy.ndarray
-            The parameter trace with shape=(n_steps, n_trainable_parameters+1)
-        show: bool
-            If true, the plot will be shown.
-
-        Returns
-        -------
-        matplotlib.pyplot.Figure
-            The plotted figure.
-        """
-
-        trace_dict = {}
-
-        for index, label in enumerate(self._trainable_labels):
-            trace_dict[label] = trace[:, index + 1]
-
-        data = arviz.convert_to_inference_data(trace_dict)
-
-        axes = arviz.plot_trace(data)
-        figure = axes[0][0].figure
-
-        if show:
-            figure.show()
-
-        return figure
-
-    def plot_corner(self, trace, show=False):
-        """Use `corner` to plot a corner plot of the parameter
-        distributions.
-
-        Parameters
-        ----------
-        trace: numpy.ndarray
-            The parameter trace with shape=(n_steps, n_trainable_parameters+1)
-        show: bool
-            If true, the plot will be shown.
-
-        Returns
-        -------
-        matplotlib.pyplot.Figure
-            The plotted figure.
-        """
-
-        figure = corner.corner(
-            trace[:, 1 : 1 + len(self._trainable_labels)],
-            labels=self._trainable_labels,
-            color="#17becf",
-        )
-
-        if show:
-            figure.show()
-
-        return figure
-
-    @staticmethod
-    def plot_log_p(log_p, show=False, label="$log p$"):
-        """Plot the log p trace.
-
-        Parameters
-        ----------
-        log_p: numpy.ndarray
-            The log p trace with shape=(n_steps, 1)
-        show: bool
-            If true, the plot will be shown.
-        label: str
-            The y-axis label to use.
-
-        Returns
-        -------
-        matplotlib.pyplot.Figure
-            The plotted figure.
-        """
-        figure, axes = pyplot.subplots(1, 1, figsize=(5, 5), dpi=200)
-
-        axes.plot(log_p, color="#17becf")
-        axes.set_xlabel("steps")
-        axes.set_ylabel(f"{label}")
-
-        if show:
-            figure.show()
-
-        return figure
-
-    def plot(self, trace, log_p, show=False):
-        """Produce plots of this models traces. This is equivalent to
-        calling `plot_trace`, `plot_corner`, `plot_log_p`,
-        `plot_percentage_deviations`.
-
-        Parameters
-        ----------
-        trace: numpy.ndarray
-            The parameter trace with shape=(n_steps, n_trainable_parameters+1)
-        log_p: numpy.ndarray
-            The log p trace with shape=(n_steps, 1)
-        show: bool
-            If true, the plots will be shown.
-
-        Returns
-        -------
-        tuple of matplotlib.pyplot.Figure
-            The plotted figures.
-        """
-        return (
-            self.plot_trace(trace, show),
-            self.plot_corner(trace, show),
-            self.plot_log_p(log_p, show),
-        )
-
-
-class TrainableModel(BayesianModel, abc.ABC):
+class SurrogateModel(BayesianModel, abc.ABC):
     """A model which can be trained upon previously generated data,
     and then be more rapidly evaluated than generating fresh data.
     """
 
     def __init__(
-        self, priors, fixed_parameters, condition_parameters, condition_data,
+        self,
+        priors,
+        variable_parameters,
+        fixed_parameters,
+        condition_parameters,
+        condition_data,
     ):
         """
         Parameters
@@ -322,7 +233,9 @@ class TrainableModel(BayesianModel, abc.ABC):
             same amount as the training values themselves.
         """
 
-        super(TrainableModel, self).__init__(priors, fixed_parameters)
+        super(SurrogateModel, self).__init__(
+            priors, variable_parameters, fixed_parameters
+        )
 
         # Keep a track of the data that this model was trained upon
         self._training_parameters = None
@@ -346,7 +259,7 @@ class TrainableModel(BayesianModel, abc.ABC):
         ----------
         parameters: numpy.ndarray
             The parameters used to generate the training data with
-            shape=(n_data_points, n_trainable_parameters).
+            shape=(n_data_points, n_variable_parameters).
         values: dict of str and numpy.ndarray
             The training data, where each value should be an array
             with shape=(n_data_points,).
@@ -361,10 +274,10 @@ class TrainableModel(BayesianModel, abc.ABC):
 
         assert all(x.shape[0] == parameters.shape[0] for x in values.values())
 
-        if self.n_trainable_parameters != parameters.shape[1]:
+        if self.n_variable_parameters != parameters.shape[1]:
 
             raise ValueError(
-                f"The parameter must be of length {self.n_trainable_parameters}"
+                f"The parameter must be of length {self.n_variable_parameters}"
             )
 
         assert all(x in uncertainties for x in values)
@@ -372,7 +285,12 @@ class TrainableModel(BayesianModel, abc.ABC):
 
         assert all(uncertainties[x].shape == values[x].shape for x in values)
 
-    @abc.abstractmethod
+    def _retrain(self):
+        """Re-train the models hyperparameters based on the currently
+        available training data.
+        """
+        raise NotImplementedError()
+
     def add_training_data(self, parameters, values, uncertainties):
         """Trains the model on a new set of data.
 
@@ -380,7 +298,7 @@ class TrainableModel(BayesianModel, abc.ABC):
         ----------
         parameters: numpy.ndarray
             The parameters used to collect the data with
-            shape=(n_data_points, n_trainable_parameters).
+            shape=(n_data_points, n_variable_parameters).
         values: dict of str and numpy.ndarray
             The data collected using the specified parameters. Each array has
             a shape=(n_data_points, 1)).
@@ -506,3 +424,5 @@ class TrainableModel(BayesianModel, abc.ABC):
             x: y / self._value_scales[x]
             for x, y in self._training_uncertainties.items()
         }
+
+        self._retrain()
