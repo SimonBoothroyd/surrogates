@@ -1,3 +1,3 @@
-from .models import Model, TrainableModel
+from .models import BayesianModel, Model, SurrogateModel
 
-__all__ = [Model, TrainableModel]
+__all__ = [BayesianModel, Model, SurrogateModel]

@@ -1,10 +1,14 @@
+import logging
+
 import gpytorch
 import torch
 
-from surrogates.models import TrainableModel
+from surrogates.models import SurrogateModel
+
+logger = logging.getLogger(__name__)
 
 
-class GaussianProcessModel(TrainableModel):
+class GaussianProcessModel(SurrogateModel):
     """A model which evaluates a trained Gaussian Process based on a radial-basis
     function kernel. The Gaussian Process may be retrained with extra data on the
     fly.
@@ -32,6 +36,7 @@ class GaussianProcessModel(TrainableModel):
     def __init__(
         self,
         priors,
+        variable_parameters,
         fixed_parameters,
         condition_parameters,
         condition_data,
@@ -40,7 +45,11 @@ class GaussianProcessModel(TrainableModel):
     ):
 
         super(GaussianProcessModel, self).__init__(
-            priors, fixed_parameters, condition_parameters, condition_data,
+            priors,
+            variable_parameters,
+            fixed_parameters,
+            condition_parameters,
+            condition_data,
         )
 
         self._models = {}
@@ -69,23 +78,7 @@ class GaussianProcessModel(TrainableModel):
                 "already been trained upon."
             )
 
-    def add_training_data(self, parameters, values, uncertainties):
-
-        super(GaussianProcessModel, self).add_training_data(
-            parameters, values, uncertainties
-        )
-
-        self._retrain()
-
     def _retrain(self):
-        """Re-train the models hyperparameters based on the currently available
-        training data.
-
-        Notes
-        -----
-        This function is based in the version found in a scikit-learn tutorial:
-        https://scikit-learn.org/stable/auto_examples/gaussian_process/plot_gpr_noisy_targets.html
-        """
 
         self._models = {}
         self._likelihoods = {}
@@ -123,7 +116,7 @@ class GaussianProcessModel(TrainableModel):
                 loss = -mll(output, values)
                 loss.backward()
 
-                print(
+                logger.debug(
                     "Iter %d/%d - Loss: %.5f   lengthscale: %.5f   outputscale: %.5f"
                     % (
                         i + 1,
@@ -158,6 +151,7 @@ class GaussianProcessModel(TrainableModel):
         for property_type in properties:
 
             with torch.no_grad(), gpytorch.settings.fast_pred_var():
+
                 prediction = self._likelihoods[property_type](
                     self._models[property_type](parameters)
                 )
