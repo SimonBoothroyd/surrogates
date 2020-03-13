@@ -11,7 +11,12 @@ class StollWerthModel(Model):
     """
 
     def __init__(
-        self, priors, variable_parameters, fixed_parameters, molecular_weight, file_path=None,
+        self,
+        priors,
+        variable_parameters,
+        fixed_parameters,
+        molecular_weight,
+        file_path=None,
     ):
 
         self._interface = StollWerthInterface(0.0, molecular_weight, file_path)

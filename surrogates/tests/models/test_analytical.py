@@ -65,7 +65,8 @@ def test_evaluate_vectorized(default_parameters):
     model = StollWerthModel(
         priors={},
         variable_parameters=["epsilon", "sigma", "temperature"],
-        fixed_parameters={"L": bond_length, "Q": quadrupole}, molecular_weight=30.069
+        fixed_parameters={"L": bond_length, "Q": quadrupole},
+        molecular_weight=30.069,
     )
 
     parameters = numpy.array(
