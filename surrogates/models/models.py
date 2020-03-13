@@ -5,7 +5,7 @@ import torch
 
 
 class Model(abc.ABC):
-    """A base model which can be evaluated at a set of parameters.
+    """A model which may be used in Bayesian inference / fitting.
     """
 
     @property
@@ -24,12 +24,14 @@ class Model(abc.ABC):
 
     @property
     def n_variable_parameters(self):
-        """int: The number of variable parameters within this model."""
+        """int: The number of variable parameters (both trainable and non-trainable) within
+        this model."""
         return len(self._variable_labels)
 
     @property
     def variable_parameter_labels(self):
-        """list of str: The friendly names of the parameters which are allowed to vary."""
+        """list of str: The names of the parameters (both trainable and non-trainable) which
+        are allowed to vary."""
         return self._variable_labels
 
     @property
@@ -38,22 +40,73 @@ class Model(abc.ABC):
         return self.n_variable_parameters + self.n_fixed_parameters
 
     @property
+    def n_trainable_parameters(self):
+        """int: The number of trainable parameters within this model."""
+        return len(self._trainable_labels)
+
+    @property
+    def trainable_parameter_labels(self):
+        """list of str: The names of the parameters which are trainable."""
+        return self._trainable_labels
+
+    @property
     def all_parameter_labels(self):
-        """list of str: The friendly names of the parameters within this model."""
+        """list of str: The names of the parameters within this model."""
         return self._variable_labels + self._fixed_labels
 
-    def __init__(self, variable_parameters, fixed_parameters):
+    @property
+    def priors(self):
+        """dict of str and Distribution: The priors on each trainable parameter of
+        this model."""
+        return self._priors
+
+    def __init__(self, priors, variable_parameters, fixed_parameters):
         """
 
         Parameters
         ----------
+        priors: dict of str and Distribution
+            The priors distributions to place on each trainable parameter, whose keys
+            are the friendly name of the parameter associated with the prior.
         variable_parameters: list of str
-            The names associated with the variable parameters of this model.
+            The names of any variable parameters which are not trainable (i.e
+            those parameters which may vary but do not appear in `priors`).
         fixed_parameters: dict of str and float
             The values of the fixed model parameters, whose keys of the name
             associated with the parameter.
         """
-        self._variable_labels = [*variable_parameters]
+
+        # Validate the priors and extract the names of the trainable parameters.
+        trainable_parameters = []
+
+        for parameter_name in priors:
+
+            distribution = priors[parameter_name]
+
+            if isinstance(parameter_name, tuple):
+
+                trainable_parameters.extend(parameter_name)
+                assert len(parameter_name) == distribution.n_variables
+            else:
+
+                trainable_parameters.append(parameter_name)
+                assert distribution.n_variables == 1
+
+        common_parameters = set.intersection(
+            {*trainable_parameters}, {*variable_parameters}
+        )
+
+        if len(common_parameters) > 0:
+
+            raise ValueError(
+                "A parameter cannot appear both in the priors dictionary and the variable "
+                "list. A parameter having a prior already implies that it is variable."
+            )
+
+        self._priors = priors
+
+        self._variable_labels = [*trainable_parameters, *variable_parameters]
+        self._trainable_labels = [*trainable_parameters]
 
         self._fixed_parameters = []
         self._fixed_labels = []
@@ -62,6 +115,17 @@ class Model(abc.ABC):
 
             self._fixed_parameters.append(fixed_parameters[parameter_name])
             self._fixed_labels.append(parameter_name)
+
+        common_parameters = set(self._fixed_labels).intersection(
+            set(self._variable_labels)
+        )
+
+        if len(common_parameters) > 0:
+
+            raise ValueError(
+                f"The {', '.join(common_parameters)} have been flagged "
+                f"as being both fixed and variable."
+            )
 
     @abc.abstractmethod
     def evaluate(self, properties, parameters):
@@ -85,78 +149,6 @@ class Model(abc.ABC):
             as shape=(n_sets,).
         """
         raise NotImplementedError()
-
-
-class BayesianModel(Model, abc.ABC):
-    """A model which may be used in Bayesian inference / fitting.
-    """
-
-    @property
-    def priors(self):
-        """dict of str and Distribution: The priors on each trainable parameter of
-        this model."""
-        return self._priors
-
-    @property
-    def n_trainable_parameters(self):
-        """int: The number of trainable parameters within this model."""
-        return self._n_trainable_parameters
-
-    @property
-    def trainable_parameter_labels(self):
-        """list of str: The friendly names of the parameters which are trainable."""
-        return [*self._priors]
-
-    def __init__(self, priors, variable_parameters, fixed_parameters):
-        """
-        Parameters
-        ----------
-        priors: dict of str and Distribution
-            The priors distributions to place on each parameter, whose keys
-            are the friendly name of the parameter associated with the prior.
-        variable_parameters: list of str
-            The names of any variable parameters which are not trainable (i.e
-            those parameters which may vary but do not appear in `priors`).
-        """
-
-        common_parameters = set.intersection({*priors}, {*variable_parameters})
-
-        if len(common_parameters) > 0:
-
-            raise ValueError(
-                "A parameter cannot appear both in the priors list and the variable "
-                "list. A parameter having a prior already implies that it is variable."
-            )
-
-        self._n_trainable_parameters = 0
-
-        for parameter_name in priors:
-
-            distribution = priors[parameter_name]
-
-            if isinstance(parameter_name, tuple):
-                assert len(parameter_name) == distribution.n_variables
-            else:
-                assert distribution.n_variables == 1
-
-            self._n_trainable_parameters += distribution.n_variables
-
-        self._priors = priors
-
-        variable_parameters = [*priors, *variable_parameters]
-
-        super(BayesianModel, self).__init__(variable_parameters, fixed_parameters)
-
-        common_parameters = set(self._fixed_labels).intersection(
-            set(self._variable_labels)
-        )
-
-        if len(common_parameters) > 0:
-
-            raise ValueError(
-                f"The {', '.join(common_parameters)} have been flagged "
-                f"as being both fixed and variable."
-            )
 
     def sample_priors(self):
         """Generates a set of random parameters from the prior
@@ -207,7 +199,7 @@ class BayesianModel(Model, abc.ABC):
         return log_prior
 
 
-class SurrogateModel(BayesianModel, abc.ABC):
+class SurrogateModel(Model, abc.ABC):
     """A model which can be trained upon previously generated data,
     and then be more rapidly evaluated than generating fresh data.
     """

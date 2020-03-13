@@ -11,22 +11,22 @@ class StollWerthModel(Model):
     """
 
     def __init__(
-        self, fixed_parameters, molecular_weight, file_path=None,
+        self, priors, variable_parameters, fixed_parameters, molecular_weight, file_path=None,
     ):
 
         self._interface = StollWerthInterface(0.0, molecular_weight, file_path)
 
         required_parameters = {"epsilon", "sigma", "L", "Q", "temperature"}
-        provided_parameters = {*fixed_parameters.keys()}
+        provided_parameters = [*priors, *variable_parameters, *fixed_parameters.keys()]
 
-        assert all(x in required_parameters for x in provided_parameters)
+        assert required_parameters == set(provided_parameters)
+        assert len(required_parameters) == len(provided_parameters)
 
-        variable_parameters = ["epsilon", "sigma", "L", "Q", "temperature"]
+        assert "temperature" in variable_parameters or fixed_parameters
 
-        for provided_parameter in provided_parameters:
-            variable_parameters.remove(provided_parameter)
-
-        super(StollWerthModel, self).__init__(variable_parameters, fixed_parameters)
+        super(StollWerthModel, self).__init__(
+            priors, variable_parameters, fixed_parameters
+        )
 
     def evaluate(self, properties, parameters):
 
