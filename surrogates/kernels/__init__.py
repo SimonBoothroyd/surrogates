@@ -1,3 +1,3 @@
-from .kernels import BaseKernel
+from .mcmc import MCMCSimulation
 
-__all__ = [BaseKernel]
+__all__ = [MCMCSimulation]

@@ -178,13 +178,14 @@ class Model(abc.ABC):
         Parameters
         ----------
         parameters: numpy.ndarray
-            The values of the parameters (with shape=n_variable_parameters)
-            to evaluate at.
+            The values of the parameters to evaluate at with
+            shape=(n_sets, n_variable_parameters).
 
         Returns
         -------
-        float
-            The sum of the log values of priors evaluated at `parameters`.
+        numpy.ndarray
+            The sum of the log values of priors evaluated at `parameters`
+            with shape=(n_sets,).
         """
         log_prior = 0.0
         counter = 0
@@ -192,11 +193,11 @@ class Model(abc.ABC):
         for prior in self._priors.values():
 
             log_prior += prior.log_pdf(
-                parameters[counter : counter + prior.n_variables]
+                parameters[:, counter : counter + prior.n_variables]
             )
             counter += prior.n_variables
 
-        return log_prior
+        return numpy.ravel(log_prior)
 
 
 class SurrogateModel(Model, abc.ABC):
