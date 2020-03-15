@@ -132,11 +132,9 @@ class MCMCSimulation:
         for i in range(steps):
 
             # Propagate the simulation one step forward.
-            (
-                current_parameters,
-                current_log_p,
-                acceptance,
-            ) = self._step(current_parameters, current_log_p, warm_up,)
+            (current_parameters, current_log_p, acceptance,) = self._step(
+                current_parameters, current_log_p, warm_up,
+            )
 
             # Update the bookkeeping.
             if not warm_up:
