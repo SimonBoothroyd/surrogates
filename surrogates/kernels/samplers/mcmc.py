@@ -16,14 +16,14 @@ class Metropolis(Sampler):
     @property
     def proposal_sizes(self):
         """numpy.ndarray: The size of the proposals to make for each
-        parameter with shape=(n_variable_parameters,).
+        parameter with shape=(n_trainable_parameters,).
         """
         return self._proposal_sizes
 
     @proposal_sizes.setter
     def proposal_sizes(self, value):
 
-        assert value.shape == (self._model.n_variable_parameters,)
+        assert value.shape == (1, self._model.n_trainable_parameters)
         self._proposal_sizes = value
 
     def __init__(
@@ -40,7 +40,7 @@ class Metropolis(Sampler):
         ----------
         proposal_sizes: numpy.ndarray, optional
             The size of the proposals to make for each parameter
-            with shape=(n_variable_parameters,).
+            with shape=(n_trainable_parameters,).
         acceptance_target: float
             The target acceptance rate for this sampler
         tune_frequency: int
@@ -59,13 +59,13 @@ class Metropolis(Sampler):
     def step(self, parameters, log_p, adapt):
 
         # Choose a random parameter to change
-        parameter_index = torch.randint(self._model.n_variable_parameters, (1,))
+        parameter_index = torch.randint(self._model.n_trainable_parameters, (1,))
 
         # Sample the new parameters from a normal distribution.
         proposed_parameters = parameters.copy()
 
-        proposed_parameters[parameter_index] = distributions.Normal(
-            parameters[parameter_index], self._proposal_sizes[parameter_index],
+        proposed_parameters[0, parameter_index] = distributions.Normal(
+            parameters[0, parameter_index], self._proposal_sizes[0, parameter_index],
         ).sample()
 
         proposed_log_p = self._log_p_function(proposed_parameters)
@@ -111,7 +111,7 @@ class Metropolis(Sampler):
             scale = 0.9 if rate < self._acceptance_target else 1.1
             scale = 1.0 if self._proposed_moves[parameter_index] == 0 else scale
 
-            self._proposal_sizes[parameter_index] *= scale
+            self._proposal_sizes[0, parameter_index] *= scale
 
         self.reset_counters()
 

@@ -19,9 +19,8 @@ class MCMCSimulation:
     @property
     def trace(self):
         """numpy.ndarray: A trajectory of the model parameters over the course
-        of the simulation with shape=(n_steps, n_variable_parameters+1), where
-        the 'first parameter is the model index'."""
-        return np.asarray(self._trace)
+        of the simulation with shape=(n_steps, n_trainable_parameters)."""
+        return np.concatenate(self._trace)
 
     @property
     def log_p_trace(self):
@@ -30,7 +29,7 @@ class MCMCSimulation:
         return np.asarray(self._log_p_trace)
 
     def __init__(
-        self, model, initial_parameters, sampler=None, random_seed=None,
+        self, model, likelihoods, initial_parameters, sampler=None, random_seed=None,
     ):
         """Initializes the basic state of the simulator object.
 
@@ -38,6 +37,8 @@ class MCMCSimulation:
         ----------
         model: Model
             The model whose posterior should be sampled.
+        likelihoods: list of Likelihood
+            The likelihoods to evaluate.
         initial_parameters: numpy.ndarray
             The initial parameters to seed the simulation with.
         sampler: Sampler, optional
@@ -48,17 +49,16 @@ class MCMCSimulation:
         """
 
         self._model = model
+        self._likelihoods = likelihoods
 
-        # Make sure the parameters are the correct shape for the
-        # specified model.
-        self._validate_parameter_shapes(initial_parameters)
+        # Make sure the parameters are valid.
+        self._validate_parameters(initial_parameters)
         self._initial_values = initial_parameters
 
         # Make sure we have a sampler set
         if sampler is None:
 
-            proposal_sizes = np.array([self._initial_values / 100])
-
+            proposal_sizes = np.array(self._initial_values / 100)
             proposal_sizes = np.where(proposal_sizes <= 0.0, 0.01, proposal_sizes)
 
             sampler = Metropolis(self._evaluate_log_p, self._model, proposal_sizes,)
@@ -82,7 +82,7 @@ class MCMCSimulation:
         self._trace = []
         self._log_p_trace = []
 
-    def _validate_parameter_shapes(self, initial_parameters):
+    def _validate_parameters(self, initial_parameters):
 
         initial_log_p = self._evaluate_log_p(initial_parameters)
 
@@ -120,14 +120,13 @@ class MCMCSimulation:
         # Make sure we don't equilibrate after having already performed
         # some production steps.
         if self._has_stepped and warm_up:
-
             raise ValueError("The warm-up phase must come before the production phase.")
 
         if progress_bar is True:
             progress_bar = tqdm(total=steps + 1)
 
         # Initialize the starting values.
-        current_parameters = self._initial_values
+        current_parameters = self._initial_values.copy()
         current_log_p = self._evaluate_log_p(current_parameters)
 
         for i in range(steps):
@@ -135,7 +134,6 @@ class MCMCSimulation:
             # Propagate the simulation one step forward.
             (
                 current_parameters,
-                current_model_index,
                 current_log_p,
                 acceptance,
             ) = self._step(current_parameters, current_log_p, warm_up,)
@@ -143,7 +141,7 @@ class MCMCSimulation:
             # Update the bookkeeping.
             if not warm_up:
 
-                self._trace.append((current_model_index, *current_parameters))
+                self._trace.append(current_parameters)
                 self._log_p_trace.append(current_log_p)
 
             if progress_bar is not None and progress_bar is not False:
@@ -200,7 +198,12 @@ class MCMCSimulation:
         float
             The evaluated log p (x).
         """
-        raise NotImplementedError()
+        log_p = self._model.evaluate_log_prior(parameters)
+
+        for likelihood in self._likelihoods:
+            log_p += likelihood.evaluate_log_p(parameters)
+
+        return log_p
 
     def save_results(self, directory_path=""):
         """Saves the results of this simulation to disk.
@@ -249,7 +252,8 @@ class MCMCSimulation:
             The directory to save the results into.
         """
 
-        os.makedirs(directory_path, exist_ok=True)
+        if len(directory_path) > 0:
+            os.makedirs(directory_path, exist_ok=True)
 
         np.save(os.path.join(directory_path, "trace.npy"), self._trace)
         np.save(os.path.join(directory_path, "log_p.npy"), self._log_p_trace)
@@ -276,7 +280,7 @@ class MCMCSimulation:
         -------
         numpy.ndarray
             A trajectory of the model parameters over the course
-            of the simulation with shape=(n_steps, n_variable_parameters+1),
+            of the simulation with shape=(n_steps, n_trainable_parameters+1),
             where the 'first parameter is the model index'.
         numpy.ndarray:
             A trajectory of the value of log p over the course

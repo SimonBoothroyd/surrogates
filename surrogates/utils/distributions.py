@@ -101,7 +101,7 @@ class Exponential(Distribution):
 
     def log_pdf(self, x):
 
-        if x < 0.0:
+        if numpy.any(x < 0.0):
             return -numpy.inf
 
         return numpy.log(self.rate) - self.rate * x

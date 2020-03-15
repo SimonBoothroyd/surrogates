@@ -59,7 +59,7 @@ def plot_corner(trace, parameter_labels, show=False):
 
     # noinspection PyTypeChecker
     figure = corner.corner(
-        trace[:, 1 : 1 + len(parameter_labels)],
+        trace,
         labels=parameter_labels,
         color="#17becf",
     )
