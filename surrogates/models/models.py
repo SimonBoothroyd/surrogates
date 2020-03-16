@@ -275,7 +275,7 @@ class SurrogateModel(abc.ABC):
             assert parameter.shape[1] == 1
 
             parameter_index = self._parameter_labels.index(label)
-            array_parameters[:, parameter_index] = parameter
+            array_parameters[:, parameter_index] = parameter[:, 0]
 
         return torch.from_numpy(array_parameters)
 

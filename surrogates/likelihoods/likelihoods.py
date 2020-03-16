@@ -65,9 +65,13 @@ class GaussianLikelihood(Likelihood):
         if any(numpy.isnan(values)) or any(numpy.isinf(values)):
             return -numpy.inf
 
+        combined_uncertainties = numpy.sqrt(
+            uncertainties * uncertainties + self._uncertainties * self._uncertainties
+        )
+
         # Compute likelihood based on gaussian penalty function
         log_p = numpy.sum(
-            distributions.Normal(values, self._uncertainties).log_pdf(self._values)
+            distributions.Normal(values, combined_uncertainties).log_pdf(self._values)
         )
 
         return log_p
