@@ -1,6 +1,6 @@
 import numpy
 
-from surrogates.models.trained import GaussianProcessModel
+from surrogates.models.surrogate import GaussianProcessModel
 
 
 def test_gaussian_process_no_noise():

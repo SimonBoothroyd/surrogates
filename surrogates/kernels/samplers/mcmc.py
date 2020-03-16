@@ -23,7 +23,7 @@ class Metropolis(Sampler):
     @proposal_sizes.setter
     def proposal_sizes(self, value):
 
-        assert value.shape == (1, self._model.n_trainable_parameters)
+        assert all(x in self._model.trainable_parameters for x in value)
         self._proposal_sizes = value
 
     def __init__(
@@ -38,9 +38,9 @@ class Metropolis(Sampler):
 
         Parameters
         ----------
-        proposal_sizes: numpy.ndarray, optional
+        proposal_sizes: dict of str and numpy.ndarray, optional
             The size of the proposals to make for each parameter
-            with shape=(n_trainable_parameters,).
+            with shape=(1,).
         acceptance_target: float
             The target acceptance rate for this sampler
         tune_frequency: int
@@ -59,14 +59,20 @@ class Metropolis(Sampler):
     def step(self, parameters, log_p, adapt):
 
         # Choose a random parameter to change
-        parameter_index = torch.randint(self._model.n_trainable_parameters, (1,))
+        parameter_index = torch.randint(self._model.n_trainable_parameters, (1,)).item()
+        parameter_label = [*parameters][parameter_index]
 
         # Sample the new parameters from a normal distribution.
-        proposed_parameters = parameters.copy()
+        proposed_parameters = {x: y for x, y in parameters.items()}
 
-        proposed_parameters[0, parameter_index] = distributions.Normal(
-            parameters[0, parameter_index], self._proposal_sizes[0, parameter_index],
-        ).sample()
+        proposed_parameters[parameter_label] = numpy.array(
+            [
+                distributions.Normal(
+                    parameters[parameter_label][0],
+                    self._proposal_sizes[parameter_label][0],
+                ).sample()
+            ]
+        )
 
         proposed_log_p = self._log_p_function(proposed_parameters)
 
@@ -76,17 +82,17 @@ class Metropolis(Sampler):
         accept = random_number < alpha
 
         # Update the bookkeeping
-        self._proposed_moves[parameter_index] += 1
+        self._proposed_moves[parameter_label] += 1
 
         if accept:
 
-            self._accepted_moves[parameter_index] += 1
+            self._accepted_moves[parameter_label] += 1
 
             parameters = proposed_parameters
             log_p = proposed_log_p
 
         # Tune the proposals if needed
-        total_proposed_moves = numpy.sum(self._proposed_moves)
+        total_proposed_moves = sum(self._proposed_moves.values())
 
         if (
             adapt
@@ -103,21 +109,28 @@ class Metropolis(Sampler):
         `acceptance_target`.
         """
 
-        divisor = numpy.maximum(1, self._proposed_moves)
-        acceptance_rates = self._accepted_moves / divisor
+        for parameter_label in self.proposed_moves:
 
-        for parameter_index, rate in enumerate(acceptance_rates):
+            if self._proposed_moves[parameter_label] == 0:
+                continue
+
+            rate = (
+                self._accepted_moves[parameter_label]
+                / self._proposed_moves[parameter_label]
+            )
 
             scale = 0.9 if rate < self._acceptance_target else 1.1
-            scale = 1.0 if self._proposed_moves[parameter_index] == 0 else scale
+            scale = 1.0 if self._proposed_moves[parameter_label] == 0 else scale
 
-            self._proposal_sizes[0, parameter_index] *= scale
+            self._proposal_sizes[parameter_label] *= scale
 
-        self.reset_counters()
+            self.reset_counters()
 
     def get_statistics_dictionary(self):
 
         return_value = super(Metropolis, self).get_statistics_dictionary()
-        return_value.update({"proposal_sizes": self.proposal_sizes.tolist()})
+        return_value.update(
+            {"proposal_sizes": {x: y.tolist() for x, y in self.proposal_sizes.items()}}
+        )
 
         return return_value

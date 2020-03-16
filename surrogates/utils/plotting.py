@@ -1,5 +1,6 @@
 import arviz
 import corner
+import numpy
 from matplotlib import pyplot
 
 
@@ -22,12 +23,7 @@ def plot_trace(trace, parameter_labels, show=False):
         The plotted figure.
     """
 
-    trace_dict = {}
-
-    for index, label in enumerate(parameter_labels):
-        trace_dict[label] = trace[:, index]
-
-    data = arviz.convert_to_inference_data(trace_dict)
+    data = arviz.convert_to_inference_data(trace)
 
     axes = arviz.plot_trace(data)
     figure = axes[0][0].figure
@@ -44,8 +40,8 @@ def plot_corner(trace, parameter_labels, show=False):
 
     Parameters
     ----------
-    trace: numpy.ndarray
-        The parameter trace with shape=(n_steps, n_variable_parameters+1)
+    trace: dict of str and numpy.ndarray
+        The parameter trace with shape=(n_steps,)
     parameter_labels: list of str
         The names of each parameter in the trace.
     show: bool
@@ -57,8 +53,10 @@ def plot_corner(trace, parameter_labels, show=False):
         The plotted figure.
     """
 
-    # noinspection PyTypeChecker
-    figure = corner.corner(trace, labels=parameter_labels, color="#17becf")
+    trace_array = numpy.concatenate(
+        [trace[x].reshape(-1, 1) for x in parameter_labels], axis=1
+    )
+    figure = corner.corner(trace_array, labels=parameter_labels, color="#17becf")
 
     if show:
         figure.show()

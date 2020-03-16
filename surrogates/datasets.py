@@ -61,31 +61,27 @@ class DataSet(BaseModel):
 
         Returns
         -------
-        dict of str and dict of str and numpy.ndarray
-            The conditions that each property was measured at.
+        dict of str numpy.ndarray
+            The temperatures that each property was measured at.
         dict of str and numpy.ndarray
             The values of each property.
-        dict of str and numpy.ndarray
-            The uncertainties in each property value.
         dict of str and numpy.ndarray
             The correlation corrected uncertainties in each property value.
         """
 
         assert all(hasattr(self, x) for x in target_properties)
 
-        parameters = {}
+        temperatures = {}
 
         values = {}
         uncertainties = {}
-        corrected_uncertainties = {}
 
         for property_type in target_properties:
 
             data = getattr(self, property_type)
 
-            parameters[property_type] = {"temperature": data[:, 0]}
+            temperatures[property_type] = data[:, 0]
             values[property_type] = data[:, 1]
-            uncertainties[property_type] = data[:, 2]
-            corrected_uncertainties[property_type] = data[:, 3]
+            uncertainties[property_type] = data[:, 3]
 
-        return parameters, values, uncertainties, corrected_uncertainties
+        return temperatures, values, uncertainties

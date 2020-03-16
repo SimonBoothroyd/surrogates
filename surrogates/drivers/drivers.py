@@ -1,7 +1,24 @@
 import abc
 
 
-class EvaluationInterface(abc.ABC):
+class DriverTarget(abc.ABC):
+    """A particular target that a driver should attempt
+    to evaluate.
+    """
+
+    def __init__(self, parameters):
+        """
+
+        Parameters
+        ----------
+        parameters: dict of str and numpy.ndarray
+            The non-model parameters which the target will be evaluated at
+            with shape=(n_parameters,).
+        """
+        self._parameters = parameters
+
+
+class Driver(abc.ABC):
     """The base class for objects which evaluate a set of optimization
     targets for a given set of parameters by calling out to another library.
 
@@ -12,32 +29,24 @@ class EvaluationInterface(abc.ABC):
     to enable rapid testing and experimentation.
     """
 
-    @property
     @abc.abstractmethod
-    def supported_properties(self):
-        """list of str: The properties supported by this interface."""
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def evaluate(self, properties, parameters):
+    def evaluate(self, targets, parameters):
         """Evaluates the specified properties at the provided
         parameters.
 
         Parameters
         ----------
-        properties: list of str
-            The properties to evaluate.
-        parameters: numpy.ndarray
-            The parameters to evaluate at with shape(n_sets, n_parameters)
-            where n_sets is the number of parameter sets to evaluate at and
-            n_parameters is the number of parameters in each set (this typically
-            corresponds to the total number of model parameters).
+        targets: list of DriverTarget
+            The targets to evaluate.
+        parameters: dict of str and numpy.ndarray
+            The model parameters to evaluate at with shape(n_sets,)
+            where n_sets is the number of parameter sets to evaluate at.
 
         Returns
         -------
-        dict of str and numpy.ndarray
+        numpy.ndarray
             The evaluated values with shape=(n_sets,)
-        dict of str and numpy.ndarray
+        numpy.ndarray
             The uncertainties in the evaluated values with shape=(n_sets,).
         """
         raise NotImplementedError()
