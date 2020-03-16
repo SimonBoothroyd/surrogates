@@ -6,7 +6,7 @@ from surrogates.likelihoods.likelihoods import GaussianLikelihood
 def test_gaussian_likelihood():
 
     values = numpy.array([[1.0]])
-    uncertainties = numpy.array([[1.0]])
+    uncertainties = numpy.array([[numpy.sqrt(0.5)]])
 
     likelihood = GaussianLikelihood(values, uncertainties, None)
 
