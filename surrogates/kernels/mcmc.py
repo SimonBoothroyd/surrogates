@@ -20,7 +20,9 @@ class MCMCSimulation:
     def trace(self):
         """numpy.ndarray: A trajectory of the model parameters over the course
         of the simulation with shape=(n_steps, n_trainable_parameters)."""
-        return np.concatenate(self._trace)
+        return {
+            x: y if len(y) == 0 else np.concatenate(y) for x, y in self._trace.items()
+        }
 
     @property
     def log_p_trace(self):
@@ -29,17 +31,15 @@ class MCMCSimulation:
         return np.asarray(self._log_p_trace)
 
     def __init__(
-        self, model, likelihoods, initial_parameters, sampler=None, random_seed=None,
+        self, model, initial_parameters, sampler=None, random_seed=None,
     ):
         """Initializes the basic state of the simulator object.
 
         Parameters
         ----------
-        model: Model
+        model: BayesianModel
             The model whose posterior should be sampled.
-        likelihoods: list of Likelihood
-            The likelihoods to evaluate.
-        initial_parameters: numpy.ndarray
+        initial_parameters: dict of str and numpy.ndarray
             The initial parameters to seed the simulation with.
         sampler: Sampler, optional
             The sampler to use for in-model proposals. If None,
@@ -49,7 +49,6 @@ class MCMCSimulation:
         """
 
         self._model = model
-        self._likelihoods = likelihoods
 
         # Make sure the parameters are valid.
         self._validate_parameters(initial_parameters)
@@ -58,10 +57,11 @@ class MCMCSimulation:
         # Make sure we have a sampler set
         if sampler is None:
 
-            proposal_sizes = np.array(self._initial_values / 100)
-            proposal_sizes = np.where(proposal_sizes <= 0.0, 0.01, proposal_sizes)
-
-            sampler = Metropolis(self._evaluate_log_p, self._model, proposal_sizes,)
+            proposal_sizes = {
+                x: 0.01 if y <= 0.0 else y / 100.0
+                for x, y in initial_parameters.items()
+            }
+            sampler = Metropolis(self._evaluate_log_p, self._model, proposal_sizes)
 
         sampler.log_p_function = self._evaluate_log_p
         self._sampler = sampler
@@ -79,7 +79,7 @@ class MCMCSimulation:
         self._has_stepped = False
 
         # Set up the trace arrays.
-        self._trace = []
+        self._trace = {label: [] for label in model.trainable_parameters}
         self._log_p_trace = []
 
     def _validate_parameters(self, initial_parameters):
@@ -126,7 +126,7 @@ class MCMCSimulation:
             progress_bar = tqdm(total=steps + 1)
 
         # Initialize the starting values.
-        current_parameters = self._initial_values.copy()
+        current_parameters = {x: y.copy() for x, y in self._initial_values.items()}
         current_log_p = self._evaluate_log_p(current_parameters)
 
         for i in range(steps):
@@ -139,7 +139,11 @@ class MCMCSimulation:
             # Update the bookkeeping.
             if not warm_up:
 
-                self._trace.append(current_parameters)
+                for parameter_label in current_parameters:
+                    self._trace[parameter_label].append(
+                        current_parameters[parameter_label]
+                    )
+
                 self._log_p_trace.append(current_log_p)
 
             if progress_bar is not None and progress_bar is not False:
@@ -159,7 +163,7 @@ class MCMCSimulation:
 
         Parameters
         ----------
-        current_parameters: numpy.ndarray
+        current_parameters: dict of str and numpy.ndarray
             The current model parameters.
         current_log_p: float
             The current value of log p.
@@ -168,7 +172,7 @@ class MCMCSimulation:
 
         Returns
         -------
-        numpy.ndarray
+        dict of str and numpy.ndarray
             The new model parameters.
         float
             The new value of log p.
@@ -188,7 +192,7 @@ class MCMCSimulation:
 
         Parameters
         ----------
-        parameters: numpy.ndarray
+        parameters: dict of str and numpy.ndarray
             The parameters to evaluate at.
 
         Returns
@@ -196,12 +200,7 @@ class MCMCSimulation:
         float
             The evaluated log p (x).
         """
-        log_p = self._model.evaluate_log_prior(parameters)
-
-        for likelihood in self._likelihoods:
-            log_p += likelihood.evaluate_log_p(parameters)
-
-        return log_p
+        return self._model.evaluate(parameters)
 
     def save_results(self, directory_path=""):
         """Saves the results of this simulation to disk.

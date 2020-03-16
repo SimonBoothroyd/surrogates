@@ -1,8 +1,6 @@
 import abc
 
-import numpy
-
-from surrogates.models import Model
+from surrogates.models import BayesianModel
 
 
 class Sampler(abc.ABC):
@@ -39,11 +37,11 @@ class Sampler(abc.ABC):
         ----------
         log_p_function: function, optional
             The log probability function to sample.
-        model: Model
+        model: BayesianModel
             The model whose parameters are being sampled.
         """
 
-        assert isinstance(model, Model)
+        assert isinstance(model, BayesianModel)
 
         self._log_p_function = None
         self._gradient_function = None
@@ -52,15 +50,15 @@ class Sampler(abc.ABC):
 
         self._model = model
 
-        self._proposed_moves = numpy.zeros(model.n_trainable_parameters)
-        self._accepted_moves = numpy.zeros(model.n_trainable_parameters)
+        self._proposed_moves = {x: 0 for x in model.trainable_parameters}
+        self._accepted_moves = {x: 0 for x in model.trainable_parameters}
 
     def reset_counters(self):
         """Resets this samplers count of the number of
         proposed and accepted moves.
         """
-        self._proposed_moves = numpy.zeros(self._model.n_trainable_parameters)
-        self._accepted_moves = numpy.zeros(self._model.n_trainable_parameters)
+        self._proposed_moves = {x: 0 for x in self._model.trainable_parameters}
+        self._accepted_moves = {x: 0 for x in self._model.trainable_parameters}
 
     @abc.abstractmethod
     def step(self, parameters, log_p, adapt):
@@ -68,8 +66,8 @@ class Sampler(abc.ABC):
 
         Parameters
         ----------
-        parameters: numpy.ndarray
-            The parameters to propagate with shape=(n_trainable_parameters,)
+        parameters: dict of str and numpy.ndarray
+            The parameters to propagate with shape=(1,)
         log_p: float
             The value of log p evaluated at the current `parameters`.
         adapt: bool
@@ -78,8 +76,8 @@ class Sampler(abc.ABC):
 
         Returns
         -------
-        numpy.ndarray
-            The new parameters with shape=(n_trainable_parameters,).
+        dict of str and numpy.ndarray
+            The new parameters with shape=(1,).
         float
             The value of log p evaluated at the new parameters.
         bool
@@ -96,6 +94,6 @@ class Sampler(abc.ABC):
         dict of str and Any
         """
         return {
-            "proposed_moves": self.proposed_moves.tolist(),
-            "accepted_moves": self.accepted_moves.tolist(),
+            "proposed_moves": self.proposed_moves,
+            "accepted_moves": self.accepted_moves,
         }

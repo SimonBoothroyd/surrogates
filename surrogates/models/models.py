@@ -1,10 +1,11 @@
 import abc
+from typing import List
 
 import numpy
 import torch
 
 
-class Model(abc.ABC):
+class BayesianModel(abc.ABC):
     """A model which may be used in Bayesian inference / fitting.
     """
 
@@ -15,29 +16,12 @@ class Model(abc.ABC):
     @property
     def n_fixed_parameters(self):
         """int: The number of fixed parameters within this model."""
-        return len(self._fixed_labels)
+        return len(self._fixed_parameters)
 
     @property
-    def fixed_parameter_labels(self):
-        """list of str: The friendly names of the parameters which are fixed."""
-        return self._fixed_labels
-
-    @property
-    def n_variable_parameters(self):
-        """int: The number of variable parameters (both trainable and non-trainable) within
-        this model."""
-        return len(self._variable_labels)
-
-    @property
-    def variable_parameter_labels(self):
-        """list of str: The names of the parameters (both trainable and non-trainable) which
-        are allowed to vary."""
-        return self._variable_labels
-
-    @property
-    def n_total_parameters(self):
-        """int: The total number of parameters within this model."""
-        return self.n_variable_parameters + self.n_fixed_parameters
+    def trainable_parameters(self):
+        """list of str: The names of the parameters which are trainable."""
+        return self._trainable_labels
 
     @property
     def n_trainable_parameters(self):
@@ -45,14 +29,9 @@ class Model(abc.ABC):
         return len(self._trainable_labels)
 
     @property
-    def trainable_parameter_labels(self):
-        """list of str: The names of the parameters which are trainable."""
-        return self._trainable_labels
-
-    @property
-    def all_parameter_labels(self):
-        """list of str: The names of the parameters within this model."""
-        return self._variable_labels + self._fixed_labels
+    def n_total_parameters(self):
+        """int: The total number of parameters within this model."""
+        return self.n_trainable_parameters + self.n_fixed_parameters
 
     @property
     def priors(self):
@@ -60,7 +39,13 @@ class Model(abc.ABC):
         this model."""
         return self._priors
 
-    def __init__(self, priors, variable_parameters, fixed_parameters):
+    @property
+    def likelihoods(self):
+        """list of Likelihood: The different likelihoods which this model
+        is conditioned upon."""
+        return self._likelihoods
+
+    def __init__(self, priors, likelihoods, driver, fixed_parameters):
         """
 
         Parameters
@@ -68,9 +53,10 @@ class Model(abc.ABC):
         priors: dict of str and Distribution
             The priors distributions to place on each trainable parameter, whose keys
             are the friendly name of the parameter associated with the prior.
-        variable_parameters: list of str
-            The names of any variable parameters which are not trainable (i.e
-            those parameters which may vary but do not appear in `priors`).
+        likelihoods: list of Likelihood
+            The likelihoods to condition this model upon.
+        driver: Driver
+            The driver to use to evaluate the likelihoods.
         fixed_parameters: dict of str and float
             The values of the fixed model parameters, whose keys of the name
             associated with the parameter.
@@ -92,84 +78,29 @@ class Model(abc.ABC):
                 trainable_parameters.append(parameter_name)
                 assert distribution.n_variables == 1
 
-        common_parameters = set.intersection(
-            {*trainable_parameters}, {*variable_parameters}
-        )
+        self._priors = {
+            x if isinstance(x, tuple) else tuple([x]): y for x, y in priors.items()
+        }
 
-        if len(common_parameters) > 0:
+        self._likelihoods = likelihoods
+        self._driver = driver
 
-            raise ValueError(
-                "A parameter cannot appear both in the priors dictionary and the variable "
-                "list. A parameter having a prior already implies that it is variable."
-            )
-
-        self._priors = priors
-
-        self._variable_labels = [*trainable_parameters, *variable_parameters]
         self._trainable_labels = [*trainable_parameters]
 
-        self._fixed_parameters = []
-        self._fixed_labels = []
+        self._fixed_parameters = {
+            x: numpy.array([[y]]) for x, y in fixed_parameters.items()
+        }
 
-        for parameter_name in fixed_parameters:
-
-            self._fixed_parameters.append(fixed_parameters[parameter_name])
-            self._fixed_labels.append(parameter_name)
-
-        common_parameters = set(self._fixed_labels).intersection(
-            set(self._variable_labels)
+        common_parameters = set(self._fixed_parameters).intersection(
+            set(self._trainable_labels)
         )
 
         if len(common_parameters) > 0:
 
             raise ValueError(
                 f"The {', '.join(common_parameters)} have been flagged "
-                f"as being both fixed and variable."
+                f"as being both fixed and trainable."
             )
-
-    @abc.abstractmethod
-    def evaluate(self, properties, parameters):
-        """Evaluate the model at the specified (variable) parameters
-
-        Parameters
-        ----------
-        properties: list of str
-            The properties which this model should evaluate.
-        parameters: numpy.ndarray
-            The parameters to evaluate the model at with
-            shape=(n_sets, n_variable_parameters).
-
-        Returns
-        -------
-        dict of str and numpy.ndarray
-            The values produced by the model, where each array
-            as shape=(n_sets,).
-        dict of str and numpy.ndarray
-            The uncertainties in the values, where each array
-            as shape=(n_sets,).
-        """
-        raise NotImplementedError()
-
-    def sample_priors(self):
-        """Generates a set of random parameters from the prior
-        distributions. Those parameters without a prior will be
-        assigned their fixed values.
-
-        Returns
-        -------
-        numpy.ndarray:
-            The sampled parameters with shape=(`n_trainable_parameters`).
-        """
-
-        initial_parameters = numpy.zeros(self.n_trainable_parameters)
-        counter = 0
-
-        for prior in self._priors.values():
-
-            initial_parameters[counter : counter + prior.n_variables] = prior.sample()
-            counter += prior.n_variables
-
-        return initial_parameters
 
     def evaluate_log_prior(self, parameters):
         """Evaluates the log value of the prior for a
@@ -177,7 +108,7 @@ class Model(abc.ABC):
 
         Parameters
         ----------
-        parameters: numpy.ndarray
+        parameters: dict of str and numpy.ndarray
             The values of the parameters to evaluate at with
             shape=(n_sets, n_variable_parameters).
 
@@ -187,35 +118,97 @@ class Model(abc.ABC):
             The sum of the log values of priors evaluated at `parameters`
             with shape=(n_sets,).
         """
-        log_prior = 0.0
-        counter = 0
+        log_prior = numpy.zeros(len(next(iter(parameters.values()))))
 
-        for prior in self._priors.values():
+        for labels, prior in self._priors.items():
 
-            log_prior += prior.log_pdf(
-                parameters[:, counter : counter + prior.n_variables]
-            )
-            counter += prior.n_variables
+            parameter = numpy.concatenate([parameters[label] for label in labels])
+            log_prior += numpy.ravel(prior.log_pdf(parameter))
 
-        return numpy.ravel(log_prior)
+        return log_prior
+
+    def evaluate_log_likelihood(self, parameters):
+        """Evaluates the log value of the likelihood for a
+        set of parameters.
+
+        Parameters
+        ----------
+        parameters: dict of str and numpy.ndarray
+            The values of the parameters to evaluate at with
+            shape=(n_sets, n_variable_parameters).
+
+        Returns
+        -------
+        numpy.ndarray
+            The sum of the log values of likelihood evaluated at `parameters`
+            with shape=(n_sets,).
+        """
+        all_parameters = {}
+        all_parameters.update(parameters)
+        all_parameters.update(self._fixed_parameters)
+
+        log_prior = numpy.zeros(len(next(iter(all_parameters.values()))))
+
+        targets = [x.driver_target for x in self._likelihoods]
+
+        evaluated_values, evaluated_uncertainties = self._driver.evaluate(
+            targets, all_parameters
+        )
+
+        for likelihood, values, uncertainties in zip(
+            self._likelihoods, evaluated_values, evaluated_uncertainties
+        ):
+            log_prior += likelihood.evaluate(values, uncertainties)
+
+        return log_prior
+
+    def evaluate(self, parameters):
+        """Evaluate the log posterior of this model at the specified
+        sets of parameters.
+
+        Parameters
+        ----------
+        parameters: numpy.ndarray
+            The parameters to evaluate the model at with
+            shape=(n_sets, n_trainable_parameters).
+
+        Returns
+        -------
+        numpy.ndarray
+            The evaluated log p with shape=(n_sets,).
+        """
+
+        return self.evaluate_log_prior(parameters) + self.evaluate_log_likelihood(
+            parameters
+        )
 
 
-class SurrogateModel(Model, abc.ABC):
+class SurrogateModel(abc.ABC):
     """A model which can be trained upon previously generated data,
     and then be more rapidly evaluated than generating fresh data.
     """
 
+    @property
+    def parameters(self):
+        """The names of the parameters that this model will be trained upon /
+        can be evaluated using."""
+        return self._parameter_labels
+
+    @property
+    def n_parameters(self):
+        """The number the parameters that this model will be trained upon /
+        can be evaluated using."""
+        return self._parameter_labels
+
     def __init__(
-        self,
-        priors,
-        variable_parameters,
-        fixed_parameters,
-        condition_parameters,
-        condition_data,
+        self, parameter_labels: List[str], condition_parameters, condition_data,
     ):
         """
         Parameters
         ----------
+        parameter_labels: list of str
+            The names of the parameters that this model will be trained upon /
+            can be evaluated using.
         condition_parameters: bool
             If true, all training parameters for this model will be shifted to
             have a zero mean, and to fall within the range [-1, 1].
@@ -226,9 +219,7 @@ class SurrogateModel(Model, abc.ABC):
             same amount as the training values themselves.
         """
 
-        super(SurrogateModel, self).__init__(
-            priors, variable_parameters, fixed_parameters
-        )
+        self._parameter_labels = parameter_labels
 
         # Keep a track of the data that this model was trained upon
         self._training_parameters = None
@@ -241,42 +232,98 @@ class SurrogateModel(Model, abc.ABC):
         self._parameter_scale = None
         self._parameter_shift = None
 
-        self._value_scales = {}
-        self._value_shifts = {}
+        self._value_scale = None
+        self._value_shift = None
 
-    def _validate_training_data(self, parameters, values, uncertainties):
-        """Validate the data to train this model on, checking among
-        other things that all dimensions are correct.
+        # Define some useful torch constants
+        self._zero = torch.tensor(0.0, dtype=torch.float64)
+        self._one = torch.tensor(1.0, dtype=torch.float64)
+
+    def _parameter_dict_to_tensor(self, parameters):
+        """Convert a dictionary of numpy arrays to a single
+        pytorch tensor (with the parameter ordering dictated by
+        the ordering of the models parameter labels.
 
         Parameters
         ----------
-        parameters: numpy.ndarray
+        parameters: dict of str and numpy.ndarray
+            The parameter dictionary to convert.
+
+        Returns
+        -------
+        torch.Tensor
+            The converted parameters.
+        """
+
+        # Make sure the parameter / values arrays are the correct shapes.
+        n_data_points = min(len(x) for x in parameters.values())
+        max_data_points = max(len(x) for x in parameters.values())
+
+        assert n_data_points == max_data_points
+
+        assert all(x in self._parameter_labels for x in parameters)
+        assert all(x in parameters for x in self._parameter_labels)
+
+        array_parameters = numpy.zeros((n_data_points, len(parameters)))
+
+        for label, parameter in parameters.items():
+
+            if parameter.ndim == 1:
+                parameter = parameter.reshape(-1, 1)
+
+            assert parameter.ndim == 2
+            assert parameter.shape[1] == 1
+
+            parameter_index = self._parameter_labels.index(label)
+            array_parameters[:, parameter_index] = parameter
+
+        return torch.from_numpy(array_parameters)
+
+    def _validate_training_data(self, parameters, values, uncertainties):
+        """Validate the data to train this model on, checking among
+        other things that all dimensions are correct, and converting
+        any `numpy` arrays to `pytorch.Tensor` objects.
+
+        Parameters
+        ----------
+        parameters: dict of str and numpy.ndarray
             The parameters used to generate the training data with
-            shape=(n_data_points, n_variable_parameters).
-        values: dict of str and numpy.ndarray
-            The training data, where each value should be an array
-            with shape=(n_data_points,).
-        uncertainties: dict of str and numpy.ndarray
+            shape=(n_data_points,).
+        values: numpy.ndarray
+            The training data with shape=(n_data_points,).
+        uncertainties: numpy.ndarray
+            The uncertainties in the `values` (assumed to be gaussian) with
+            shape=(n_data_points,).
+
+        Returns
+        -------
+        torch.Tensor
+            The validated parameters with shape=(n_data_points, n_parameters).
+        torch.Tensor
+            The training data with shape=(n_data_points,).
+        torch.Tensor
             The uncertainties in the `values` (assumed to be gaussian) Each array
             has a shape=(n_data_points, 1)).
         """
 
         # Make sure the parameter / values arrays are the correct shapes.
-        assert parameters.ndim == 2
-        assert all(x.ndim == 1 for x in values.values())
+        parameters = self._parameter_dict_to_tensor(parameters)
 
-        assert all(x.shape[0] == parameters.shape[0] for x in values.values())
+        if values.ndim == 1:
+            values = values.reshape(-1, 1)
+        if uncertainties.ndim == 1:
+            uncertainties = uncertainties.reshape(-1, 1)
 
-        if self.n_variable_parameters != parameters.shape[1]:
+        assert values.ndim == 2
+        assert values.shape[1] == 1
+        assert len(values) == len(parameters)
 
-            raise ValueError(
-                f"The parameter must be of length {self.n_variable_parameters}"
-            )
+        assert uncertainties.shape == values.shape
 
-        assert all(x in uncertainties for x in values)
-        assert all(x in values for x in uncertainties)
+        values = torch.from_numpy(values)
+        uncertainties = torch.from_numpy(uncertainties)
 
-        assert all(uncertainties[x].shape == values[x].shape for x in values)
+        return parameters, values, uncertainties
 
     def _retrain(self):
         """Re-train the models hyperparameters based on the currently
@@ -289,21 +336,20 @@ class SurrogateModel(Model, abc.ABC):
 
         Parameters
         ----------
-        parameters: numpy.ndarray
+        parameters: dict of str and numpy.ndarray
             The parameters used to collect the data with
-            shape=(n_data_points, n_variable_parameters).
-        values: dict of str and numpy.ndarray
+            shape=(n_data_points, 1).
+        values: numpy.ndarray
             The data collected using the specified parameters. Each array has
             a shape=(n_data_points, 1)).
-        uncertainties: dict of str and numpy.ndarray
+        uncertainties: numpy.ndarray
             The uncertainties in the `values` (assumed to be gaussian) Each array
             has a shape=(n_data_points, 1)).
         """
-        self._validate_training_data(parameters, values, uncertainties)
 
-        parameters = torch.from_numpy(parameters)
-        values = {x: torch.from_numpy(y) for x, y in values.items()}
-        uncertainties = {x: torch.from_numpy(y) for x, y in uncertainties.items()}
+        (parameters, values, uncertainties) = self._validate_training_data(
+            parameters, values, uncertainties
+        )
 
         # Add the extra data the existing set.
         if self._training_parameters is None:
@@ -328,28 +374,17 @@ class SurrogateModel(Model, abc.ABC):
         else:
 
             # First make sure to un-condition the existing data.
-            self._training_values = {
-                x: y * self._value_scales[x] for x, y in self._training_values.items()
-            }
-            self._training_values = {
-                x: y + self._value_shifts[x] for x, y in self._training_values.items()
-            }
-            self._training_uncertainties = {
-                x: y * self._value_scales[x]
-                for x, y in self._training_uncertainties.items()
-            }
+            self._training_values = (
+                self._training_values * self._value_scale + self._value_shift
+            )
+            self._training_uncertainties = (
+                self._training_uncertainties * self._value_scale
+            )
 
-            self._training_values = {
-                x: torch.cat([self._training_values[x], values[x]])
-                for x in self._training_values
-            }
-            self._training_uncertainties = {
-                x: torch.cat([self._training_uncertainties[x], uncertainties[x]])
-                for x in self._training_uncertainties
-            }
-
-        torch_zero = torch.tensor(0.0, dtype=torch.float64)
-        torch_one = torch.tensor(1.0, dtype=torch.float64)
+            self._training_values = torch.cat([self._training_values, values])
+            self._training_uncertainties = torch.cat(
+                [self._training_uncertainties, uncertainties]
+            )
 
         # Determine any conditioning factors.
         if self._condition_parameters:
@@ -362,8 +397,8 @@ class SurrogateModel(Model, abc.ABC):
                 - self._training_parameters.min(axis=0)[0]
             )
             self._parameter_scale = torch.where(
-                torch.isclose(self._parameter_scale, torch_zero),
-                torch_one,
+                torch.isclose(self._parameter_scale, self._zero),
+                self._one,
                 self._parameter_scale,
             )
 
@@ -379,43 +414,51 @@ class SurrogateModel(Model, abc.ABC):
         if self._condition_data:
 
             # noinspection PyArgumentList
-            self._value_shifts = {
-                x: torch.mean(y, axis=0) for x, y in self._training_values.items()
-            }
-            self._value_scales = {
-                x: y.max(axis=0)[0] - y.min(axis=0)[0]
-                for x, y in self._training_values.items()
-            }
-            self._value_scales = {
-                x: torch.where(torch.isclose(y, torch_zero), torch_one, y)
-                for x, y in self._value_scales.items()
-            }
+            self._value_shift = torch.mean(self._training_values, axis=0)
+            # noinspection PyArgumentList
+            self._value_scale = (
+                self._training_values.max(axis=0)[0]
+                - self._training_values.min(axis=0)[0]
+            )
+            self._value_scale = torch.where(
+                torch.isclose(self._value_scale, self._zero),
+                self._one,
+                self._value_scale,
+            )
 
         else:
 
-            self._value_shifts = {
-                x: torch.zeros((1,), dtype=torch.float64)
-                for x, y in self._training_values.items()
-            }
-            self._value_scales = {
-                x: torch.ones((1,), dtype=torch.float64)
-                for x, y in self._training_values.items()
-            }
+            self._value_shift = torch.zeros((1,), dtype=torch.float64)
+            self._value_scale = torch.ones((1,), dtype=torch.float64)
 
         # Condition the data.
         self._training_parameters = (
             self._training_parameters - self._parameter_shift
         ) / self._parameter_scale
 
-        self._training_values = {
-            x: y - self._value_shifts[x] for x, y in self._training_values.items()
-        }
-        self._training_values = {
-            x: y / self._value_scales[x] for x, y in self._training_values.items()
-        }
-        self._training_uncertainties = {
-            x: y / self._value_scales[x]
-            for x, y in self._training_uncertainties.items()
-        }
+        self._training_values = (
+            self._training_values - self._value_shift
+        ) / self._value_scale
+        self._training_uncertainties = self._training_uncertainties / self._value_scale
 
         self._retrain()
+
+    @abc.abstractmethod
+    def evaluate(self, parameters):
+        """Evaluate the model at the specified set of parameters.
+
+        Parameters
+        ----------
+        parameters: dict of str and numpy.ndarray
+            The parameters to evaluate the model at where
+            each array has shape=(n_data_points).
+
+        Returns
+        -------
+        numpy.ndarray
+            The evaluated model values with shape=(n_data_points,)
+        numpy.ndarray
+            The uncertainty (assumed to be Gaussian) in each evaluated value
+            with shape=(n_data_points,)
+        """
+        raise NotImplementedError()

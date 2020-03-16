@@ -4,22 +4,42 @@ import numpy
 import yaml
 from pkg_resources import resource_filename
 
-from surrogates.interfaces import EvaluationInterface
+from surrogates.drivers import Driver, DriverTarget
 
 
-class StollWerthInterface(EvaluationInterface):
-    """A mock 'simulation' interface which 'evaluates' all properties by using
-    the analytical models proposed by Stoll et al and Werth et al, with added,
-    user definable, Gaussian noise.
+class StollWerthTarget(DriverTarget):
+    @property
+    def supported_properties(self):
+        """tuple of str: The properties supported by this interface."""
+        return "liquid_density", "vapor_pressure", "surface_tension"
+
+    @property
+    def property_type(self):
+        """str: The target property."""
+        return self._property_type
+
+    @property
+    def temperatures(self):
+        """numpy.ndarray: The temperatures this target should be evaluated
+        at with shape=(n_temperatures, 1)."""
+        return self._parameters["temperature"]
+
+    def __init__(self, temperatures, property_type):
+
+        super(StollWerthTarget, self).__init__(parameters={"temperature": temperatures})
+        assert property_type in self.supported_properties
+
+        self._property_type = property_type
+
+
+class StollWerthDriver(Driver):
+    """A driver which 'evaluates' properties by using the analytical models
+    proposed by Stoll et al and Werth et al, with added, user definable, Gaussian
+    noise.
     """
 
     _reduced_boltzmann = 1.38065
     _reduced_D_to_sqrt_J_m3 = 3.1623
-
-    @property
-    def supported_properties(self):
-        """list of str: The properties supported by this interface."""
-        return ["liquid_density", "vapor_pressure", "surface_tension"]
 
     def __init__(self, fractional_noise, molecular_weight, file_path=None):
         """
@@ -354,17 +374,24 @@ class StollWerthInterface(EvaluationInterface):
 
         return rho_star
 
-    def _liquid_density(self, parameters, temperature):
+    def _liquid_density(self, epsilon, sigma, bond_length, quadrupole, temperature):
         """Computes the liquid density of the two-center Lennard-Jones
         model for a given set of model parameters over a specified range
         of temperatures.
 
         Parameters
         ----------
-        parameters: numpy.ndarray
-            The parameters to evaluate the model at. This should be an
-            array of shape=(4,1) which contains the epsilon parameter in
+        epsilon: numpy.ndarray
+            The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
+        sigma: numpy.ndarray
+            The values of epsilon to calculate the property at in
+            units of of nm.
+        bond_length: numpy.ndarray
+            The values of the bond-length to calculate the property at
+            in units of of nm.
+        quadrupole: numpy.ndarray
+            The values of the bond-length to calculate the property at.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
@@ -373,7 +400,6 @@ class StollWerthInterface(EvaluationInterface):
         numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
 
         molecular_weight = self.molecular_weight
 
@@ -445,17 +471,24 @@ class StollWerthInterface(EvaluationInterface):
         )
         return vapor_pressure_star
 
-    def _vapor_pressure(self, parameters, temperature):
+    def _vapor_pressure(self, epsilon, sigma, bond_length, quadrupole, temperature):
         """Computes the saturation pressure of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
-        parameters: numpy.ndarray
-            The parameters to evaluate the model at. This should be an
-            array of shape=(2,1) which contains the epsilon parameter in
+        epsilon: numpy.ndarray
+            The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
+        sigma: numpy.ndarray
+            The values of epsilon to calculate the property at in
+            units of of nm.
+        bond_length: numpy.ndarray
+            The values of the bond-length to calculate the property at
+            in units of of nm.
+        quadrupole: numpy.ndarray
+            The values of the bond-length to calculate the property at.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
         Returns
@@ -463,7 +496,6 @@ class StollWerthInterface(EvaluationInterface):
         numpy.ndarray
             The evaluated saturation pressures in units of kPa
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
 
         temperature_star = temperature / epsilon
 
@@ -514,17 +546,24 @@ class StollWerthInterface(EvaluationInterface):
         )
         return surface_tension_star
 
-    def _surface_tension(self, parameters, temperature):
+    def _surface_tension(self, epsilon, sigma, bond_length, quadrupole, temperature):
         """Computes the surface tension of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
-        parameters: numpy.ndarray
-            The parameters to evaluate the model at. This should be an
-            array of shape=(4,1) which contains the epsilon parameter in
+        epsilon: numpy.ndarray
+            The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
+        sigma: numpy.ndarray
+            The values of epsilon to calculate the property at in
+            units of of nm.
+        bond_length: numpy.ndarray
+            The values of the bond-length to calculate the property at
+            in units of of nm.
+        quadrupole: numpy.ndarray
+            The values of the bond-length to calculate the property at.
         temperature: numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
@@ -533,8 +572,6 @@ class StollWerthInterface(EvaluationInterface):
         numpy.ndarray
             The evaluated surface tensions in units of J / m^2
         """
-        epsilon, sigma, bond_length, quadrupole = parameters
-
         # Note that epsilon is defined as epsilon/kB
         temperature_star = temperature / epsilon
 
@@ -556,7 +593,7 @@ class StollWerthInterface(EvaluationInterface):
         )
         return surface_tension  # [J/m2]
 
-    def _evaluate_analytical(self, properties, parameters):
+    def _evaluate_analytical(self, property_type, temperatures, parameters):
 
         property_functions = {
             "liquid_density": self._liquid_density,
@@ -564,35 +601,33 @@ class StollWerthInterface(EvaluationInterface):
             "surface_tension": self._surface_tension,
         }
 
-        values = {}
-
-        for property_type in properties:
-
-            values[property_type] = property_functions[property_type](
-                parameters[:, :4].T, parameters[:, 4]
-            ).reshape(-1, 1)
+        values = property_functions[property_type](
+            **parameters, temperature=temperatures
+        ).reshape(-1, 1)
 
         return values
 
-    def evaluate(self, properties, parameters):
+    def evaluate(self, targets, parameters):
 
-        noiseless_values = self._evaluate_analytical(properties, parameters)
+        values = []
+        uncertainties = []
 
-        values = {}
-        uncertainties = {}
+        for target in targets:
 
-        for property_type in properties:
+            assert isinstance(target, StollWerthTarget)
 
-            property_uncertainties = (
-                noiseless_values[property_type] * self._fractional_noise
+            noiseless_values = self._evaluate_analytical(
+                target.property_type, target.temperatures, parameters
             )
+
+            property_uncertainties = noiseless_values * self._fractional_noise
             property_values = (
-                noiseless_values[property_type]
+                noiseless_values
                 + numpy.random.randn(*property_uncertainties.shape)
                 * property_uncertainties
             )
 
-            values[property_type] = property_values
-            uncertainties[property_type] = property_uncertainties
+            values.append(property_values)
+            uncertainties.append(property_uncertainties)
 
         return values, uncertainties
