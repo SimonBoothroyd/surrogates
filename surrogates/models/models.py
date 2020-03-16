@@ -264,12 +264,15 @@ class SurrogateModel(abc.ABC):
         assert all(x in self._parameter_labels for x in parameters)
         assert all(x in parameters for x in self._parameter_labels)
 
-        assert all(x.ndim == 2 for x in parameters.values())
-        assert all(x.shape[1] == 1 for x in parameters.values())
-
         array_parameters = numpy.zeros((n_data_points, len(parameters)))
 
-        for label, parameter in parameters:
+        for label, parameter in parameters.items():
+
+            if parameter.ndim == 1:
+                parameter = parameter.reshape(-1, 1)
+
+            assert parameter.ndim == 2
+            assert parameter.shape[1] == 1
 
             parameter_index = self._parameter_labels.index(label)
             array_parameters[:, parameter_index] = parameter
@@ -305,6 +308,11 @@ class SurrogateModel(abc.ABC):
 
         # Make sure the parameter / values arrays are the correct shapes.
         parameters = self._parameter_dict_to_tensor(parameters)
+
+        if values.ndim == 1:
+            values = values.reshape(-1, 1)
+        if uncertainties.ndim == 1:
+            uncertainties = uncertainties.reshape(-1, 1)
 
         assert values.ndim == 2
         assert values.shape[1] == 1
