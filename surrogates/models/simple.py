@@ -1,4 +1,9 @@
+from typing import Dict, List
+
+from surrogates.drivers import Driver
+from surrogates.likelihoods.likelihoods import Likelihood
 from surrogates.models import BayesianModel
+from surrogates.utils.distributions import Distribution
 
 
 class TwoCenterLennardJones(BayesianModel):
@@ -6,7 +11,11 @@ class TwoCenterLennardJones(BayesianModel):
     """
 
     def __init__(
-        self, priors, likelihoods, driver, fixed_parameters,
+        self,
+        priors: Dict[str, Distribution],
+        likelihoods: List[Likelihood],
+        driver: Driver,
+        fixed_parameters: Dict[str, float],
     ):
 
         required_parameters = {"epsilon", "sigma", "bond_length", "quadrupole"}

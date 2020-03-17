@@ -1,3 +1,5 @@
+from typing import Dict, List, Tuple
+
 import numpy
 from pydantic import BaseModel, Field
 
@@ -50,7 +52,11 @@ class DataSet(BaseModel):
         "uncertainty (kg / m^3) and the correlation corrected uncertainty (kg / m^3).",
     )
 
-    def to_likelihood_dict(self, target_properties):
+    def to_likelihood_dict(
+        self, target_properties: List[str]
+    ) -> Tuple[
+        Dict[str, numpy.ndarray], Dict[str, numpy.ndarray], Dict[str, numpy.ndarray]
+    ]:
         """Converts this data set to a dictionary which may
         easily be used by the different likelihood objects.
 

@@ -2,6 +2,7 @@ import abc
 
 import numpy
 
+from surrogates.drivers import DriverTarget
 from surrogates.utils import distributions
 
 
@@ -10,12 +11,17 @@ class Likelihood(abc.ABC):
     a set of reference data"""
 
     @property
-    def driver_target(self):
+    def driver_target(self) -> DriverTarget:
         """DriverTarget: The target which describes how the driver should
         evaluate this likelihood."""
         return self._driver_target
 
-    def __init__(self, values, uncertainties, driver_target):
+    def __init__(
+        self,
+        values: numpy.ndarray,
+        uncertainties: numpy.ndarray,
+        driver_target: DriverTarget,
+    ):
         """
         Parameters
         ----------
@@ -38,7 +44,9 @@ class Likelihood(abc.ABC):
         self._driver_target = driver_target
 
     @abc.abstractmethod
-    def evaluate(self, values, uncertainties):
+    def evaluate(
+        self, values: numpy.ndarray, uncertainties: numpy.ndarray
+    ) -> numpy.ndarray:
         """Evaluates the likelihood for an evaluated set of values.
 
         Parameters
@@ -60,7 +68,9 @@ class GaussianLikelihood(Likelihood):
     """A Gaussian likelihood function which is conditioned upon
     a set of data."""
 
-    def evaluate(self, values, uncertainties):
+    def evaluate(
+        self, values: numpy.ndarray, uncertainties: numpy.ndarray
+    ) -> numpy.ndarray:
 
         if any(numpy.isnan(values)) or any(numpy.isinf(values)):
             return -numpy.inf

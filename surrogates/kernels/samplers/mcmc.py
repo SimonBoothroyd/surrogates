@@ -3,10 +3,13 @@ This module implements a samplers based off of the
 Metropolis-Hasting acceptance criteria. These samplers
 do not require nor make use of gradient information.
 """
+from typing import Any, Callable, Dict, Tuple
+
 import numpy
 import torch
 
 from surrogates.kernels.samplers import Sampler
+from surrogates.models import BayesianModel
 from surrogates.utils import distributions
 
 
@@ -14,31 +17,30 @@ class Metropolis(Sampler):
     """A base class for different in-model parameter samplers."""
 
     @property
-    def proposal_sizes(self):
-        """numpy.ndarray: The size of the proposals to make for each
+    def proposal_sizes(self) -> Dict[str, numpy.ndarray]:
+        """dict of str and numpy.ndarray: The size of the proposals to make for each
         parameter with shape=(n_trainable_parameters,).
         """
         return self._proposal_sizes
 
     @proposal_sizes.setter
-    def proposal_sizes(self, value):
+    def proposal_sizes(self, value: Dict[str, numpy.ndarray]):
 
         assert all(x in self._model.trainable_parameters for x in value)
         self._proposal_sizes = value
 
     def __init__(
         self,
-        log_p_function,
-        model,
-        proposal_sizes,
-        acceptance_target=0.5,
-        tune_frequency=100,
+        log_p_function: Callable[[Dict[str, numpy.ndarray]], numpy.ndarray],
+        model: BayesianModel,
+        proposal_sizes: Dict[str, numpy.ndarray],
+        acceptance_target: float = 0.5,
+        tune_frequency: int = 100,
     ):
-        """Initializes self.
-
+        """
         Parameters
         ----------
-        proposal_sizes: dict of str and numpy.ndarray, optional
+        proposal_sizes: dict of str and numpy.ndarray
             The size of the proposals to make for each parameter
             with shape=(1,).
         acceptance_target: float
@@ -56,7 +58,9 @@ class Metropolis(Sampler):
 
         self._tune_frequency = tune_frequency
 
-    def step(self, parameters, log_p, adapt):
+    def step(
+        self, parameters: Dict[str, numpy.ndarray], log_p: numpy.ndarray, adapt: bool
+    ) -> Tuple[Dict[str, numpy.ndarray], numpy.ndarray, bool]:
 
         # Choose a random parameter to change
         parameter_index = torch.randint(self._model.n_trainable_parameters, (1,)).item()
@@ -126,7 +130,7 @@ class Metropolis(Sampler):
 
             self.reset_counters()
 
-    def get_statistics_dictionary(self):
+    def get_statistics_dictionary(self) -> Dict[str, Any]:
 
         return_value = super(Metropolis, self).get_statistics_dictionary()
         return_value.update(

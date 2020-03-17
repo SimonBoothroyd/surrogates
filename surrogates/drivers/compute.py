@@ -1,4 +1,6 @@
-from typing import List
+from typing import Dict, List, Tuple
+
+import numpy
 
 from surrogates.drivers import Driver
 from surrogates.drivers.targets import PropertyTarget
@@ -15,7 +17,12 @@ class SurrogateDriver(Driver):
     data.
     """
 
-    def __init__(self, surrogate_models, simulation_driver, reweighting_driver):
+    def __init__(
+        self,
+        surrogate_models: Dict[str, SurrogateModel],
+        simulation_driver: Driver,
+        reweighting_driver: Driver,
+    ):
         """
         Parameters
         ----------
@@ -39,7 +46,9 @@ class SurrogateDriver(Driver):
         self._simulation_driver = simulation_driver
         self._reweighting_driver = reweighting_driver
 
-    def _train_surrogates(self, targets: List[PropertyTarget], parameters):
+    def _train_surrogates(
+        self, targets: List[PropertyTarget], parameters: Dict[str, numpy.ndarray]
+    ):
         """Generate new data and retrain the surrogate model
         so that it is able to accurately be evaluated at the
         specified parameters.
@@ -58,7 +67,9 @@ class SurrogateDriver(Driver):
 
         raise NotImplementedError()
 
-    def evaluate(self, targets, parameters):
+    def evaluate(
+        self, targets: List[PropertyTarget], parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
         """
         Parameters
         ----------

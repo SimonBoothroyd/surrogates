@@ -1,6 +1,8 @@
 import logging
+from typing import Dict, Tuple
 
 import gpytorch
+import numpy
 import torch
 
 from surrogates.models import SurrogateModel
@@ -15,7 +17,12 @@ class GaussianProcess(SurrogateModel):
     """
 
     class _ExactGPModel(gpytorch.models.ExactGP):
-        def __init__(self, train_x, train_y, likelihood):
+        def __init__(
+            self,
+            train_x: torch.Tensor,
+            train_y: torch.Tensor,
+            likelihood: gpytorch.likelihoods.FixedNoiseGaussianLikelihood,
+        ):
 
             super(GaussianProcess._ExactGPModel, self).__init__(
                 train_x, train_y, likelihood
@@ -26,7 +33,7 @@ class GaussianProcess(SurrogateModel):
                 gpytorch.kernels.RBFKernel()
             )
 
-        def forward(self, x):
+        def forward(self, x: torch.Tensor) -> gpytorch.distributions.MultivariateNormal:
 
             mean_x = self.mean_module(x)
             covar_x = self.covar_module(x)
@@ -106,14 +113,16 @@ class GaussianProcess(SurrogateModel):
         self._model.eval()
         self._likelihood.eval()
 
-    def can_evaluate(self, parameters):
+    def can_evaluate(self, parameters: Dict[str, numpy.ndarray]) -> bool:
 
         # TODO: Add distance checks between training points
         #       and evaluation points, somehow using the
         #       RBF lengthscale as a cutoff?
         return super(GaussianProcess, self).can_evaluate(parameters)
 
-    def evaluate(self, parameters):
+    def evaluate(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
 
         if self._model is None:
             raise ValueError("The model has not yet been trained upon any data.")

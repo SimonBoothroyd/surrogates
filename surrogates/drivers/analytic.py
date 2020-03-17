@@ -1,4 +1,5 @@
 import os
+from typing import Dict, List, Optional, Tuple
 
 import numpy
 import yaml
@@ -10,7 +11,7 @@ from surrogates.drivers.targets import PropertyTarget
 
 class StollWerthTarget(PropertyTarget):
     @classmethod
-    def supported_properties(cls):
+    def supported_properties(cls) -> Tuple[str, ...]:
         """tuple of str: The properties supported by this interface."""
         return "liquid_density", "vapor_pressure", "surface_tension"
 
@@ -24,7 +25,12 @@ class StollWerthDriver(Driver):
     _reduced_boltzmann = 1.38065
     _reduced_D_to_sqrt_J_m3 = 3.1623
 
-    def __init__(self, fractional_noise, molecular_weight, file_path=None):
+    def __init__(
+        self,
+        fractional_noise: float,
+        molecular_weight: float,
+        file_path: Optional[str] = None,
+    ):
         """
         Parameters
         ----------
@@ -87,7 +93,11 @@ class StollWerthDriver(Driver):
         self._B = numpy.array(parameters["Werth"]["A_star_params"]["B_params"])
 
     @staticmethod
-    def _correlation_function_1(quadrupole_star, bond_length_star, b):
+    def _correlation_function_1(
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+        b: numpy.ndarray,
+    ) -> numpy.ndarray:
 
         q = quadrupole_star
         l = bond_length_star
@@ -107,7 +117,11 @@ class StollWerthDriver(Driver):
         return result
 
     @staticmethod
-    def _correlation_function_2(quadrupole_star, bond_length_star, b):
+    def _correlation_function_2(
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+        b: numpy.ndarray,
+    ) -> numpy.ndarray:
 
         q = quadrupole_star
         l = bond_length_star
@@ -126,7 +140,11 @@ class StollWerthDriver(Driver):
         return result
 
     @staticmethod
-    def _correlation_function_3(quadrupole_star, bond_length_star, b):
+    def _correlation_function_3(
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+        b: numpy.ndarray,
+    ) -> numpy.ndarray:
 
         q = quadrupole_star
         l = bond_length_star
@@ -144,7 +162,9 @@ class StollWerthDriver(Driver):
 
         return result
 
-    def _a_correlation_function(self, quadrupole_star, bond_length_star):
+    def _a_correlation_function(
+        self, quadrupole_star: numpy.ndarray, bond_length_star: numpy.ndarray
+    ) -> numpy.ndarray:
 
         c_a, c_b, c_c, c_d, c_e = self._A_a, self._A_b, self._A_c, self._A_d, self._A_e
 
@@ -166,7 +186,9 @@ class StollWerthDriver(Driver):
 
         return a + b + c + d + e
 
-    def _critical_temperature_star(self, quadrupole_star_sqr, bond_length_star):
+    def _critical_temperature_star(
+        self, quadrupole_star_sqr: numpy.ndarray, bond_length_star: numpy.ndarray
+    ) -> numpy.ndarray:
         """Computes the reduced critical temperature of the two-center
         Lennard-Jones model for a given set of model parameters.
 
@@ -202,24 +224,30 @@ class StollWerthDriver(Driver):
 
         return t_c_star
 
-    def _critical_temperature(self, epsilon, sigma, bond_length, quadrupole):
+    def _critical_temperature(
+        self,
+        epsilon: numpy.ndarray,
+        sigma: numpy.ndarray,
+        bond_length: numpy.ndarray,
+        quadrupole: numpy.ndarray,
+    ):
         """Computes the critical temperature of the two-center
         Lennard-Jones model for a given set of model parameters.
 
         Parameters
         ----------
-        epsilon: float
+        epsilon: numpy.numpy.ndarray
             The epsilon parameter in units of K.
-        sigma: float
+        sigma: numpy.numpy.ndarray
             The sigma parameter in units of nm.
-        bond_length: float
+        bond_length: numpy.numpy.ndarray
             The bond-length parameter in units of nm.
-        quadrupole: float
+        quadrupole: numpy.numpy.ndarray
             The quadrupole parameter in units of Debye * nm.
 
         Returns
         -------
-        float
+        numpy.numpy.ndarray
             The critical temperature in units of K.
         """
         quadrupole_star_sqr = (quadrupole * self._reduced_D_to_sqrt_J_m3) ** 2 / (
@@ -234,7 +262,9 @@ class StollWerthDriver(Driver):
 
         return critical_temperature
 
-    def _critical_density_star(self, quadrupole_star, bond_length_star):
+    def _critical_density_star(
+        self, quadrupole_star: numpy.ndarray, bond_length_star: numpy.ndarray
+    ) -> numpy.ndarray:
         """Computes the reduced critical density of the two-center
         Lennard-Jones model for a given set of model parameters.
 
@@ -270,24 +300,30 @@ class StollWerthDriver(Driver):
 
         return rho_c_star
 
-    def _critical_density(self, epsilon, sigma, bond_length, quadrupole):
+    def _critical_density(
+        self,
+        epsilon: numpy.ndarray,
+        sigma: numpy.ndarray,
+        bond_length: numpy.ndarray,
+        quadrupole: numpy.ndarray,
+    ):
         """Computes the critical density of the two-center Lennard-Jones
         model for a given set of model parameters.
 
         Parameters
         ----------
-        epsilon: float
+        epsilon: numpy.numpy.ndarray
             The epsilon parameter in units of K.
-        sigma: float
+        sigma: numpy.numpy.ndarray
             The sigma parameter in units of nm.
-        bond_length: float
+        bond_length: numpy.numpy.ndarray
             The bond-length parameter in units of nm.
-        quadrupole: float
+        quadrupole: numpy.numpy.ndarray
             The quadrupole parameter in units of Debye * nm.
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
 
@@ -302,14 +338,19 @@ class StollWerthDriver(Driver):
         rho = rho_star * molecular_weight / sigma ** 3 / 6.02214 * 10.0
         return rho  # [kg/m3]
 
-    def _liquid_density_star(self, temperature_star, quadrupole_star, bond_length_star):
+    def _liquid_density_star(
+        self,
+        temperature_star: numpy.ndarray,
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the reduced liquid density of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
 
         Parameters
         ----------
-        temperature_star: numpy.ndarray
+        temperature_star: numpy.numpy.ndarray
             The reduced temperatures to evaluate the reduced density at.
         quadrupole_star: float
             The reduced quadrupole parameter.
@@ -318,7 +359,7 @@ class StollWerthDriver(Driver):
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The reduced density.
         """
 
@@ -357,30 +398,37 @@ class StollWerthDriver(Driver):
 
         return rho_star
 
-    def _liquid_density(self, epsilon, sigma, bond_length, quadrupole, temperature):
+    def _liquid_density(
+        self,
+        epsilon: numpy.ndarray,
+        sigma: numpy.ndarray,
+        bond_length: numpy.ndarray,
+        quadrupole: numpy.ndarray,
+        temperature: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the liquid density of the two-center Lennard-Jones
         model for a given set of model parameters over a specified range
         of temperatures.
 
         Parameters
         ----------
-        epsilon: numpy.ndarray
+        epsilon: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
-        sigma: numpy.ndarray
+        sigma: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of of nm.
-        bond_length: numpy.ndarray
+        bond_length: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at
             in units of of nm.
-        quadrupole: numpy.ndarray
+        quadrupole: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at.
-        temperature: numpy.ndarray
+        temperature: numpy.numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The evaluated densities in units of kg / m3.
         """
 
@@ -400,14 +448,19 @@ class StollWerthDriver(Driver):
         rho = rho_star * molecular_weight / sigma ** 3 / 6.02214 * 10.0
         return rho  # [kg/m3]
 
-    def _vapor_pressure_star(self, temperature_star, quadrupole_star, bond_length_star):
+    def _vapor_pressure_star(
+        self,
+        temperature_star: numpy.ndarray,
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the reduced saturation pressure of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
 
         Parameters
         ----------
-        temperature_star: numpy.ndarray
+        temperature_star: numpy.numpy.ndarray
             The reduced temperatures to evaluate the reduced density at.
         quadrupole_star: float
             The reduced quadrupole parameter.
@@ -416,7 +469,7 @@ class StollWerthDriver(Driver):
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The reduced saturation pressures.
         """
 
@@ -454,29 +507,36 @@ class StollWerthDriver(Driver):
         )
         return vapor_pressure_star
 
-    def _vapor_pressure(self, epsilon, sigma, bond_length, quadrupole, temperature):
+    def _vapor_pressure(
+        self,
+        epsilon: numpy.ndarray,
+        sigma: numpy.ndarray,
+        bond_length: numpy.ndarray,
+        quadrupole: numpy.ndarray,
+        temperature: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the saturation pressure of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
-        epsilon: numpy.ndarray
+        epsilon: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
-        sigma: numpy.ndarray
+        sigma: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of of nm.
-        bond_length: numpy.ndarray
+        bond_length: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at
             in units of of nm.
-        quadrupole: numpy.ndarray
+        quadrupole: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at.
-        temperature: numpy.ndarray
+        temperature: numpy.numpy.ndarray
             The temperatures to evaluate the density at in units of K.
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The evaluated saturation pressures in units of kPa
         """
 
@@ -496,15 +556,18 @@ class StollWerthDriver(Driver):
         return vapor_pressure  # [kPa]
 
     def _surface_tension_star(
-        self, temperature_star, quadrupole_star, bond_length_star
-    ):
+        self,
+        temperature_star: numpy.ndarray,
+        quadrupole_star: numpy.ndarray,
+        bond_length_star: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the reduced surface tension of the two-center
         Lennard-Jones model for a given set of model parameters over
         a specified range of temperatures.
 
         Parameters
         ----------
-        temperature_star: numpy.ndarray
+        temperature_star: numpy.numpy.ndarray
             The reduced temperatures to evaluate the reduced density at.
         quadrupole_star: float
             The reduced quadrupole parameter.
@@ -513,7 +576,7 @@ class StollWerthDriver(Driver):
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The reduced surface tensions.
         """
         _B = self._B
@@ -529,30 +592,37 @@ class StollWerthDriver(Driver):
         )
         return surface_tension_star
 
-    def _surface_tension(self, epsilon, sigma, bond_length, quadrupole, temperature):
+    def _surface_tension(
+        self,
+        epsilon: numpy.ndarray,
+        sigma: numpy.ndarray,
+        bond_length: numpy.ndarray,
+        quadrupole: numpy.ndarray,
+        temperature: numpy.ndarray,
+    ) -> numpy.ndarray:
         """Computes the surface tension of the two-center Lennard-Jones model
         for a given set of model parameters over a specified range of
         temperatures.
 
         Parameters
         ----------
-        epsilon: numpy.ndarray
+        epsilon: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of K, the sigma parameter in units of nm.
-        sigma: numpy.ndarray
+        sigma: numpy.numpy.ndarray
             The values of epsilon to calculate the property at in
             units of of nm.
-        bond_length: numpy.ndarray
+        bond_length: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at
             in units of of nm.
-        quadrupole: numpy.ndarray
+        quadrupole: numpy.numpy.ndarray
             The values of the bond-length to calculate the property at.
-        temperature: numpy.ndarray
+        temperature: numpy.numpy.ndarray
             The temperatures to evaluate the density at in units of K.
 
         Returns
         -------
-        numpy.ndarray
+        numpy.numpy.ndarray
             The evaluated surface tensions in units of J / m^2
         """
         # Note that epsilon is defined as epsilon/kB
@@ -576,7 +646,12 @@ class StollWerthDriver(Driver):
         )
         return surface_tension  # [J/m2]
 
-    def _evaluate_analytical(self, property_type, temperatures, parameters):
+    def _evaluate_analytical(
+        self,
+        property_type: str,
+        temperatures: numpy.ndarray,
+        parameters: Dict[str, numpy.ndarray],
+    ) -> numpy.ndarray:
 
         property_functions = {
             "liquid_density": self._liquid_density,
@@ -590,7 +665,9 @@ class StollWerthDriver(Driver):
 
         return values
 
-    def evaluate(self, targets, parameters):
+    def evaluate(
+        self, targets: List[StollWerthTarget], parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
 
         values = []
         uncertainties = []

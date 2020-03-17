@@ -1,9 +1,11 @@
-from typing import List
+from typing import Dict, List
 
 import numpy
 
 
-def parameter_dict_to_array(parameters, parameter_order: List[str]):
+def parameter_dict_to_array(
+    parameters: Dict[str, numpy.ndarray], parameter_order: List[str]
+) -> numpy.ndarray:
     """Convert a dictionary of numpy arrays to a single
     numpy array (with the parameter ordering dictated by
     the ordering of a set of parameter labels.
