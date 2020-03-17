@@ -1,10 +1,14 @@
 import abc
-from typing import List
+from typing import Dict, List, Tuple
 
 import numpy
 import torch
+from numpy import ndarray
 from scipy.spatial.qhull import Delaunay
 
+from surrogates.drivers import Driver
+from surrogates.likelihoods.likelihoods import Likelihood
+from surrogates.utils.distributions import Distribution
 from surrogates.utils.numpy import parameter_dict_to_array
 
 
@@ -13,42 +17,48 @@ class BayesianModel(abc.ABC):
     """
 
     @property
-    def fixed_parameters(self):
+    def fixed_parameters(self) -> Dict[str, float]:
         return self._fixed_parameters
 
     @property
-    def n_fixed_parameters(self):
+    def n_fixed_parameters(self) -> int:
         """int: The number of fixed parameters within this model."""
         return len(self._fixed_parameters)
 
     @property
-    def trainable_parameters(self):
+    def trainable_parameters(self) -> List[str]:
         """list of str: The names of the parameters which are trainable."""
         return self._trainable_labels
 
     @property
-    def n_trainable_parameters(self):
+    def n_trainable_parameters(self) -> int:
         """int: The number of trainable parameters within this model."""
         return len(self._trainable_labels)
 
     @property
-    def n_total_parameters(self):
+    def n_total_parameters(self) -> int:
         """int: The total number of parameters within this model."""
         return self.n_trainable_parameters + self.n_fixed_parameters
 
     @property
-    def priors(self):
+    def priors(self) -> Dict[str, Distribution]:
         """dict of str and Distribution: The priors on each trainable parameter of
         this model."""
         return self._priors
 
     @property
-    def likelihoods(self):
+    def likelihoods(self) -> List[Likelihood]:
         """list of Likelihood: The different likelihoods which this model
         is conditioned upon."""
         return self._likelihoods
 
-    def __init__(self, priors, likelihoods, driver, fixed_parameters):
+    def __init__(
+        self,
+        priors: Dict[str, Distribution],
+        likelihoods: List[Likelihood],
+        driver: Driver,
+        fixed_parameters: Dict[str, float],
+    ):
         """
 
         Parameters
@@ -105,7 +115,7 @@ class BayesianModel(abc.ABC):
                 f"as being both fixed and trainable."
             )
 
-    def evaluate_log_prior(self, parameters):
+    def evaluate_log_prior(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
         """Evaluates the log value of the prior for a
         set of parameters.
 
@@ -130,7 +140,7 @@ class BayesianModel(abc.ABC):
 
         return log_prior
 
-    def evaluate_log_likelihood(self, parameters):
+    def evaluate_log_likelihood(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
         """Evaluates the log value of the likelihood for a
         set of parameters.
 
@@ -165,7 +175,7 @@ class BayesianModel(abc.ABC):
 
         return log_prior
 
-    def evaluate(self, parameters):
+    def evaluate(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
         """Evaluate the log posterior of this model at the specified
         sets of parameters.
 
@@ -192,25 +202,28 @@ class SurrogateModel(abc.ABC):
     """
 
     @property
-    def parameters(self):
-        """The names of the parameters that this model will be trained upon /
-        can be evaluated using."""
+    def parameters(self) -> List[str]:
+        """list of str: The names of the parameters that this model will be trained
+        upon / can be evaluated using."""
         return self._parameter_labels
 
     @property
-    def n_parameters(self):
+    def n_parameters(self) -> int:
         """The number the parameters that this model will be trained upon /
         can be evaluated using."""
-        return self._parameter_labels
+        return len(self._parameter_labels)
 
     @property
-    def convex_hull(self):
-        """scpyA convex hull which is wrapped around the parameters which
-        were used to train the model."""
+    def convex_hull(self) -> Delaunay:
+        """scipy.spatial.qhull: A convex hull which is wrapped around the parameters
+        which were used to train the model."""
         return self._convex_hull
 
     def __init__(
-        self, parameter_labels: List[str], condition_parameters, condition_data,
+        self,
+        parameter_labels: List[str],
+        condition_parameters: bool,
+        condition_data: bool,
     ):
         """
         Parameters
@@ -252,7 +265,9 @@ class SurrogateModel(abc.ABC):
         # to evaluate lie within the models region of confidence.
         self._convex_hull = None
 
-    def _parameter_dict_to_tensor(self, parameters):
+    def _parameter_dict_to_tensor(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> torch.Tensor:
         """Convert a dictionary of numpy arrays to a single
         pytorch tensor (with the parameter ordering dictated by
         the ordering of the models parameter labels.
@@ -271,7 +286,12 @@ class SurrogateModel(abc.ABC):
         array_parameters = parameter_dict_to_array(parameters, self._parameter_labels)
         return torch.from_numpy(array_parameters)
 
-    def _validate_training_data(self, parameters, values, uncertainties):
+    def _validate_training_data(
+        self,
+        parameters: Dict[str, numpy.ndarray],
+        values: numpy.ndarray,
+        uncertainties: numpy.ndarray,
+    ):
         """Validate the data to train this model on, checking among
         other things that all dimensions are correct, and converting
         any `numpy` arrays to `pytorch.Tensor` objects.
@@ -330,7 +350,12 @@ class SurrogateModel(abc.ABC):
 
         self._convex_hull = Delaunay(self._training_parameters.numpy())
 
-    def add_training_data(self, parameters, values, uncertainties):
+    def add_training_data(
+        self,
+        parameters: Dict[str, numpy.ndarray],
+        values: numpy.ndarray,
+        uncertainties: numpy.ndarray,
+    ):
         """Trains the model on a new set of data.
 
         Parameters
@@ -443,7 +468,7 @@ class SurrogateModel(abc.ABC):
         self._rebuild_hull()
         self._retrain()
 
-    def can_evaluate(self, parameters):
+    def can_evaluate(self, parameters: Dict[str, numpy.ndarray]) -> bool:
         """Checks whether this model has been trained upon sufficient
         data close to the parameters of interest to be able to be
         accurately evaluated.
@@ -466,7 +491,9 @@ class SurrogateModel(abc.ABC):
         return self._convex_hull.find_simplex(parameters) >= 0
 
     @abc.abstractmethod
-    def evaluate(self, parameters):
+    def evaluate(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
         """Evaluate the model at the specified set of parameters.
 
         Parameters

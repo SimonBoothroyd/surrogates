@@ -1,4 +1,8 @@
 import abc
+from typing import Dict, List, Tuple
+
+import numpy
+from numpy import ndarray
 
 
 class DriverTarget(abc.ABC):
@@ -12,7 +16,7 @@ class DriverTarget(abc.ABC):
         will be evaluated at with shape=(n_parameters,)."""
         return self._parameters
 
-    def __init__(self, parameters):
+    def __init__(self, parameters: Dict[str, ndarray]):
         """
 
         Parameters
@@ -36,7 +40,9 @@ class Driver(abc.ABC):
     """
 
     @abc.abstractmethod
-    def evaluate(self, targets, parameters):
+    def evaluate(
+        self, targets: List[DriverTarget], parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
         """Evaluates the specified properties at the provided
         parameters.
 

@@ -1,10 +1,14 @@
+from typing import Dict, List
+
 import arviz
 import corner
 import numpy
 from matplotlib import pyplot
+from matplotlib.figure import Figure
+from numpy import ndarray
 
 
-def plot_trace(trace, show=False):
+def plot_trace(trace: Dict[str, ndarray], show: bool = False) -> Figure:
     """Use `Arviz` to plot a trace of the variable parameters,
     alongside a histogram of their distribution.
 
@@ -32,7 +36,9 @@ def plot_trace(trace, show=False):
     return figure
 
 
-def plot_corner(trace, parameter_labels, show=False):
+def plot_corner(
+    trace: Dict[str, ndarray], parameter_labels: List[str], show: bool = False
+) -> Figure:
     """Use `corner` to plot a corner plot of the parameter
     distributions.
 
@@ -62,7 +68,9 @@ def plot_corner(trace, parameter_labels, show=False):
     return figure
 
 
-def plot_log_p(log_p, show=False, label="$log p$"):
+def plot_log_p(
+    log_p: numpy.ndarray, show: bool = False, label: str = "$log p$"
+) -> Figure:
     """Plot the log p trace.
 
     Parameters
