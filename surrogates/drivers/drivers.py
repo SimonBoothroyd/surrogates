@@ -6,6 +6,12 @@ class DriverTarget(abc.ABC):
     to evaluate.
     """
 
+    @property
+    def parameters(self):
+        """dict of str and numpy.ndarray: The non-model parameters which the target
+        will be evaluated at with shape=(n_parameters,)."""
+        return self._parameters
+
     def __init__(self, parameters):
         """
 

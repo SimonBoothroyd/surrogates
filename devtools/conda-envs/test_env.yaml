@@ -22,6 +22,7 @@ dependencies:
   - pymbar
   - tqdm
   - pyyaml
+  - scipy
 
     # Gaussian Processes
   - pytorch

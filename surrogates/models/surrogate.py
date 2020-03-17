@@ -106,6 +106,13 @@ class GaussianProcess(SurrogateModel):
         self._model.eval()
         self._likelihood.eval()
 
+    def can_evaluate(self, parameters):
+
+        # TODO: Add distance checks between training points
+        #       and evaluation points, somehow using the
+        #       RBF lengthscale as a cutoff?
+        return super(GaussianProcess, self).can_evaluate(parameters)
+
     def evaluate(self, parameters):
 
         if self._model is None:
