@@ -3,6 +3,9 @@ from typing import List
 
 import numpy
 import torch
+from scipy.spatial.qhull import Delaunay
+
+from surrogates.utils.numpy import parameter_dict_to_array
 
 
 class BayesianModel(abc.ABC):
@@ -200,6 +203,12 @@ class SurrogateModel(abc.ABC):
         can be evaluated using."""
         return self._parameter_labels
 
+    @property
+    def convex_hull(self):
+        """scpyA convex hull which is wrapped around the parameters which
+        were used to train the model."""
+        return self._convex_hull
+
     def __init__(
         self, parameter_labels: List[str], condition_parameters, condition_data,
     ):
@@ -239,6 +248,10 @@ class SurrogateModel(abc.ABC):
         self._zero = torch.tensor(0.0, dtype=torch.float64)
         self._one = torch.tensor(1.0, dtype=torch.float64)
 
+        # Define the hull we will use to check whether the parameters
+        # to evaluate lie within the models region of confidence.
+        self._convex_hull = None
+
     def _parameter_dict_to_tensor(self, parameters):
         """Convert a dictionary of numpy arrays to a single
         pytorch tensor (with the parameter ordering dictated by
@@ -255,28 +268,7 @@ class SurrogateModel(abc.ABC):
             The converted parameters.
         """
 
-        # Make sure the parameter / values arrays are the correct shapes.
-        n_data_points = min(len(x) for x in parameters.values())
-        max_data_points = max(len(x) for x in parameters.values())
-
-        assert n_data_points == max_data_points
-
-        assert all(x in self._parameter_labels for x in parameters)
-        assert all(x in parameters for x in self._parameter_labels)
-
-        array_parameters = numpy.zeros((n_data_points, len(parameters)))
-
-        for label, parameter in parameters.items():
-
-            if parameter.ndim == 1:
-                parameter = parameter.reshape(-1, 1)
-
-            assert parameter.ndim == 2
-            assert parameter.shape[1] == 1
-
-            parameter_index = self._parameter_labels.index(label)
-            array_parameters[:, parameter_index] = parameter[:, 0]
-
+        array_parameters = parameter_dict_to_array(parameters, self._parameter_labels)
         return torch.from_numpy(array_parameters)
 
     def _validate_training_data(self, parameters, values, uncertainties):
@@ -330,6 +322,9 @@ class SurrogateModel(abc.ABC):
         available training data.
         """
         raise NotImplementedError()
+
+    def _rebuild_hull(self):
+        self._convex_hull = Delaunay(self._training_parameters.numpy())
 
     def add_training_data(self, parameters, values, uncertainties):
         """Trains the model on a new set of data.
@@ -441,7 +436,27 @@ class SurrogateModel(abc.ABC):
         ) / self._value_scale
         self._training_uncertainties = self._training_uncertainties / self._value_scale
 
+        self._rebuild_hull()
         self._retrain()
+
+    def can_evaluate(self, parameters):
+        """Checks whether this model has been trained upon sufficient
+        data close to the parameters of interest to be able to be
+        accurately evaluated.
+
+        Parameters
+        ----------
+        parameters: dict of str and numpy.ndarray
+            The parameters to evaluate the model at where
+            each array has shape=(n_data_points).
+
+        Returns
+        -------
+        bool
+        """
+
+        parameters = self._parameter_dict_to_tensor(parameters).numpy()
+        return self._convex_hull.find_simplex(parameters) >= 0
 
     @abc.abstractmethod
     def evaluate(self, parameters):

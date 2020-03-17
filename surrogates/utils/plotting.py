@@ -4,16 +4,14 @@ import numpy
 from matplotlib import pyplot
 
 
-def plot_trace(trace, parameter_labels, show=False):
+def plot_trace(trace, show=False):
     """Use `Arviz` to plot a trace of the variable parameters,
     alongside a histogram of their distribution.
 
     Parameters
     ----------
-    trace: numpy.ndarray
+    trace: dict of str and numpy.ndarray
         The parameter trace with shape=(n_steps, n_variable_parameters)
-    parameter_labels: list of str
-        The names of each parameter in the trace.
     show: bool
         If true, the plot will be shown.
 
