@@ -324,6 +324,10 @@ class SurrogateModel(abc.ABC):
         raise NotImplementedError()
 
     def _rebuild_hull(self):
+
+        if self._training_parameters.shape[0] < self._training_parameters.shape[1] + 2:
+            return
+
         self._convex_hull = Delaunay(self._training_parameters.numpy())
 
     def add_training_data(self, parameters, values, uncertainties):
@@ -454,6 +458,9 @@ class SurrogateModel(abc.ABC):
         -------
         bool
         """
+
+        if self._convex_hull is None:
+            return False
 
         parameters = self._parameter_dict_to_tensor(parameters).numpy()
         return self._convex_hull.find_simplex(parameters) >= 0
