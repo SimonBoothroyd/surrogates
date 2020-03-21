@@ -1,3 +1,6 @@
+import copy
+import os
+import pickle
 from typing import Dict, List, Tuple
 
 import numpy
@@ -5,6 +8,30 @@ import numpy
 from surrogates.drivers import Driver
 from surrogates.drivers.targets import PropertyTarget
 from surrogates.models import SurrogateModel
+
+
+class SurrogateDriverSnapshot:
+    """Stores a snapshot of the current state of a driver, namely the
+    parameters it was evaluated at and the simulation and reweighted
+    training points generated during the snapshot.
+    """
+
+    def __init__(
+        self,
+        current_evaluation: int,
+        current_parameters: Dict[str, numpy.ndarray],
+    ):
+
+        self.current_evaluation = current_evaluation
+        self.current_parameters = copy.deepcopy(current_parameters)
+
+        self.simulation_training_parameters: Dict[str, Dict[str, numpy.ndarray]] = {}
+        self.simulation_training_values: Dict[str, numpy.ndarray] = {}
+        self.simulation_training_stds: Dict[str, numpy.ndarray] = {}
+
+        self.reweighted_training_parameters: Dict[str, Dict[str, numpy.ndarray]] = {}
+        self.reweighted_training_values: Dict[str, numpy.ndarray] = {}
+        self.reweighted_training_stds: Dict[str, numpy.ndarray] = {}
 
 
 class SurrogateDriver(Driver):
@@ -22,6 +49,8 @@ class SurrogateDriver(Driver):
         surrogate_models: Dict[str, SurrogateModel],
         simulation_driver: Driver,
         reweighting_driver: Driver,
+        output_directory: str = "surrogate_snapshots",
+        output_frequency: int = 100,
     ):
         """
         Parameters
@@ -35,6 +64,11 @@ class SurrogateDriver(Driver):
         reweighting_driver: Driver
             The driver which will be used to reweight cached simulation
             data to cheaply generate new data to train the model on.
+        output_directory: str
+            The directory to store any output files in.
+        output_frequency: int
+            The frequency (in number of evaluations) with which to store
+            the output.
         """
         assert all(isinstance(x, SurrogateModel) for x in surrogate_models.values())
 
@@ -45,6 +79,12 @@ class SurrogateDriver(Driver):
 
         self._simulation_driver = simulation_driver
         self._reweighting_driver = reweighting_driver
+
+        self._output_directory = output_directory
+        os.makedirs(self._output_directory, exist_ok=True)
+
+        self._current_evaluations = 0
+        self._output_frequency = output_frequency
 
     def _reweight_training_data(
         self,
@@ -74,7 +114,7 @@ class SurrogateDriver(Driver):
         assert len(parameters_to_perturb) > 0
 
         initial_scale = 0.0005
-        maximum_scale = 0.0075
+        maximum_scale = 0.005
 
         reweighted_parameters = {x: [] for x in surrogate_model.parameters}
 
@@ -138,7 +178,10 @@ class SurrogateDriver(Driver):
         return reweighted_parameters, reweighted_values, reweighted_stds
 
     def _train_surrogates(
-        self, targets: List[PropertyTarget], parameters: Dict[str, numpy.ndarray]
+        self,
+        targets: List[PropertyTarget],
+        parameters: Dict[str, numpy.ndarray],
+        snapshot: SurrogateDriverSnapshot,
     ) -> bool:
         """Generate new data and retrain the surrogate model
         so that it is able to accurately be evaluated at the
@@ -152,6 +195,9 @@ class SurrogateDriver(Driver):
             The parameters which the surrogate should be accurately
             evaluable at (*not* necessarily the parameters to train
             the model at).
+        snapshot: SurrogateDriverSnapshot
+            The current evaluation snapshot to register the new training
+            data with.
         """
 
         if len(targets) == 0:
@@ -171,11 +217,32 @@ class SurrogateDriver(Driver):
 
             surrogate_model = self._surrogate_models[target.property_type]
 
+            # Add the simulation training data to the snapshot
+            snapshot.simulation_training_parameters[target.property_type] = {
+                x: y for x, y in parameters.items() if x in surrogate_model.parameters
+            }
+            snapshot.simulation_training_values[target.property_type] = simulated_value
+            snapshot.simulation_training_stds[target.property_type] = simulated_std
+
+            # Reweight the data.
             (
                 training_parameters,
                 training_values,
                 training_stds,
             ) = self._reweight_training_data(target, surrogate_model, parameters)
+
+            # Add the reweighted data to the snapshot.
+            snapshot.reweighted_training_parameters[target.property_type] = {
+                x: numpy.concatenate(y)
+                for x, y in training_parameters.items()
+                if x in surrogate_model.parameters
+            }
+            snapshot.reweighted_training_values[
+                target.property_type
+            ] = numpy.concatenate(training_values)
+            snapshot.reweighted_training_stds[target.property_type] = numpy.concatenate(
+                training_stds
+            )
 
             n_target_parameters = len(simulated_value)
 
@@ -224,6 +291,7 @@ class SurrogateDriver(Driver):
         targets_to_retrain = []
         target_parameters = {}
 
+        # Build the arrays containing all of the model and target parameters.
         for target in targets:
 
             full_parameters = parameters.copy()
@@ -235,10 +303,27 @@ class SurrogateDriver(Driver):
                 if x in self._surrogate_models[target.property_type].parameters
             }
 
-            if not self._surrogate_models[target.property_type].can_evaluate(full_parameters):
+            if not self._surrogate_models[target.property_type].can_evaluate(
+                full_parameters
+            ):
                 targets_to_retrain.append(target)
 
             target_parameters[target.property_type] = full_parameters
+
+        # Create a snapshot of the current evaluation if we have met the
+        # specified frequency or if we are retraining the model.
+        self._current_evaluations += 1
+        evaluation_snapshot = None
+
+        if (
+            self._current_evaluations % self._output_frequency == 0
+            or len(targets_to_retrain) > 0
+        ):
+
+            evaluation_snapshot = SurrogateDriverSnapshot(
+                current_evaluation=self._current_evaluations,
+                current_parameters=target_parameters,
+            )
 
         values = []
         uncertainties = []
@@ -246,7 +331,10 @@ class SurrogateDriver(Driver):
         if len(targets_to_retrain) > 0:
 
             print("Retraining model")
-            could_train = self._train_surrogates(targets_to_retrain, parameters)
+
+            could_train = self._train_surrogates(
+                targets_to_retrain, parameters, evaluation_snapshot
+            )
 
             if not could_train:
 
@@ -263,5 +351,15 @@ class SurrogateDriver(Driver):
 
             values.append(value)
             uncertainties.append(uncertainty)
+
+        # Save the snapshot to disk
+        if evaluation_snapshot is not None:
+
+            with open(
+                os.path.join(self._output_directory, str(self._current_evaluations)),
+                "wb",
+            ) as file:
+
+                pickle.dump(evaluation_snapshot, file)
 
         return values, uncertainties
