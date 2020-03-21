@@ -265,6 +265,9 @@ class SurrogateModel(abc.ABC):
         # to evaluate lie within the models region of confidence.
         self._convex_hull = None
 
+        self._flat_parameter_indices = []
+        self._flat_parameter_values = []
+
     def _parameter_dict_to_tensor(
         self, parameters: Dict[str, numpy.ndarray]
     ) -> torch.Tensor:
@@ -345,10 +348,28 @@ class SurrogateModel(abc.ABC):
 
     def _rebuild_hull(self):
 
-        if self._training_parameters.shape[0] < self._training_parameters.shape[1] + 2:
+        numpy_parameters = self._training_parameters.numpy()
+
+        if numpy_parameters.shape[0] < numpy_parameters.shape[1] + 2:
+            # Check we have enough points to build a Delaunay hull.
             return
 
-        self._convex_hull = Delaunay(self._training_parameters.numpy())
+        # We need to remove any 'flat' degrees of freedom (i.e any
+        # parameters where all training data has the same value, such
+        # as removing temperatures if all training points were measured
+        # at the same temperature).
+        self._flat_parameter_indices = numpy.argwhere(
+            numpy.all(numpy_parameters == numpy_parameters[0, :], axis=0)
+        )
+
+        self._flat_parameter_values = numpy_parameters[0, self._flat_parameter_indices]
+
+        index_mask = numpy.ones(numpy_parameters.shape[1], numpy.bool)
+        index_mask[self._flat_parameter_indices] = 0
+
+        hull_parameters = numpy_parameters[:, index_mask]
+
+        self._convex_hull = Delaunay(hull_parameters)
 
     def add_training_data(
         self,
@@ -487,8 +508,22 @@ class SurrogateModel(abc.ABC):
         if self._convex_hull is None:
             return False
 
-        parameters = self._parameter_dict_to_tensor(parameters).numpy()
-        return self._convex_hull.find_simplex(parameters) >= 0
+        parameters = self._parameter_dict_to_tensor(parameters)
+        parameters = (parameters - self._parameter_shift) / self._parameter_scale
+
+        parameters = parameters.numpy()
+
+        flat_parameters = parameters[:, self._flat_parameter_indices]
+
+        if not numpy.allclose(flat_parameters, self._flat_parameter_values):
+            return False
+
+        index_mask = numpy.ones(parameters.shape[1], numpy.bool)
+        index_mask[self._flat_parameter_indices] = 0
+
+        hull_parameters = parameters[:, index_mask]
+
+        return self._convex_hull.find_simplex(hull_parameters) >= 0
 
     @abc.abstractmethod
     def evaluate(
