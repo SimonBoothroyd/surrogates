@@ -17,9 +17,7 @@ class SurrogateDriverSnapshot:
     """
 
     def __init__(
-        self,
-        current_evaluation: int,
-        current_parameters: Dict[str, numpy.ndarray],
+        self, current_evaluation: int, current_parameters: Dict[str, numpy.ndarray],
     ):
 
         self.current_evaluation = current_evaluation
