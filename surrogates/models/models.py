@@ -224,6 +224,7 @@ class SurrogateModel(abc.ABC):
         parameter_labels: List[str],
         condition_parameters: bool,
         condition_data: bool,
+        double_precision: bool,
     ):
         """
         Parameters
@@ -239,6 +240,8 @@ class SurrogateModel(abc.ABC):
             have a zero mean, and to fall within the range [-1, 1]. The
             uncertainties in the training values will also be scaled by the
             same amount as the training values themselves.
+        double_precision: bool
+            Whether to use single or double precision.
         """
 
         self._parameter_labels = parameter_labels
@@ -257,9 +260,15 @@ class SurrogateModel(abc.ABC):
         self._value_scale = None
         self._value_shift = None
 
+        self._double_precision = double_precision
+
         # Define some useful torch constants
-        self._zero = torch.tensor(0.0, dtype=torch.float64)
-        self._one = torch.tensor(1.0, dtype=torch.float64)
+        self._zero = torch.tensor(
+            0.0, dtype=torch.float32 if not double_precision else torch.float64
+        )
+        self._one = torch.tensor(
+            1.0, dtype=torch.float32 if not double_precision else torch.float64
+        )
 
         # Define the hull we will use to check whether the parameters
         # to evaluate lie within the models region of confidence.
@@ -287,7 +296,11 @@ class SurrogateModel(abc.ABC):
         """
 
         array_parameters = parameter_dict_to_array(parameters, self._parameter_labels)
-        return torch.from_numpy(array_parameters)
+
+        if not self._double_precision:
+            return torch.from_numpy(array_parameters).float()
+        else:
+            return torch.from_numpy(array_parameters).double()
 
     def _validate_training_data(
         self,
@@ -335,8 +348,12 @@ class SurrogateModel(abc.ABC):
 
         assert uncertainties.shape == values.shape
 
-        values = torch.from_numpy(values)
-        uncertainties = torch.from_numpy(uncertainties)
+        if self._double_precision:
+            values = torch.from_numpy(values).double()
+            uncertainties = torch.from_numpy(uncertainties).double()
+        else:
+            values = torch.from_numpy(values).float()
+            uncertainties = torch.from_numpy(uncertainties).float()
 
         return parameters, values, uncertainties
 
@@ -450,10 +467,12 @@ class SurrogateModel(abc.ABC):
         else:
 
             self._parameter_shift = torch.zeros(
-                (1, parameters.shape[1]), dtype=torch.float64
+                (1, parameters.shape[1]),
+                dtype=torch.float32 if not self._double_precision else torch.float64,
             )
             self._parameter_scale = torch.ones(
-                (1, parameters.shape[1]), dtype=torch.float64
+                (1, parameters.shape[1]),
+                dtype=torch.float32 if not self._double_precision else torch.float64,
             )
 
         if self._condition_data:
@@ -473,8 +492,14 @@ class SurrogateModel(abc.ABC):
 
         else:
 
-            self._value_shift = torch.zeros((1,), dtype=torch.float64)
-            self._value_scale = torch.ones((1,), dtype=torch.float64)
+            self._value_shift = torch.zeros(
+                (1,),
+                dtype=torch.float32 if not self._double_precision else torch.float64,
+            )
+            self._value_scale = torch.ones(
+                (1,),
+                dtype=torch.float32 if not self._double_precision else torch.float64,
+            )
 
         # Condition the data.
         self._training_parameters = (

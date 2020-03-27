@@ -11,6 +11,7 @@ def test_gaussian_process_no_noise():
         condition_data=True,
         learning_rate=0.25,
         train_iterations=25,
+        double_precision=True,
     )
 
     model.add_training_data(

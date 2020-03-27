@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import gpytorch
 import numpy
@@ -42,15 +42,28 @@ class GaussianProcess(SurrogateModel):
 
     def __init__(
         self,
-        parameter_labels,
-        condition_parameters,
-        condition_data,
-        learning_rate=0.1,
-        train_iterations=200,
+        parameter_labels: List[str],
+        condition_parameters: bool,
+        condition_data: bool,
+        double_precision: bool = False,
+        learning_rate: float = 0.1,
+        train_iterations: int = 200,
     ):
 
+        """
+
+        Parameters
+        ----------
+        learning_rate: float
+            The learning rate to use when optimizing the
+            hyperparameters.
+        train_iterations: int
+            The number of training iterations to run when optimizing
+            the hyperparameters.
+        """
+
         super(GaussianProcess, self).__init__(
-            parameter_labels, condition_parameters, condition_data,
+            parameter_labels, condition_parameters, condition_data, double_precision,
         )
 
         self._model = None
@@ -130,11 +143,17 @@ class GaussianProcess(SurrogateModel):
         parameters = self._parameter_dict_to_tensor(parameters)
         parameters = (parameters - self._parameter_shift) / self._parameter_scale
 
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        if self._double_precision:
 
-            prediction = self._likelihood(self._model(parameters))
+            with torch.no_grad():
+                prediction = self._likelihood(self._model(parameters))
 
-            values = (prediction.mean * self._value_scale + self._value_shift).numpy()
-            uncertainties = (prediction.stddev * self._value_scale).numpy()
+        else:
+
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+                prediction = self._likelihood(self._model(parameters))
+
+        values = (prediction.mean * self._value_scale + self._value_shift).numpy()
+        uncertainties = (prediction.stddev * self._value_scale).numpy()
 
         return values, uncertainties
