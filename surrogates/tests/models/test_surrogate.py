@@ -9,8 +9,8 @@ def test_gaussian_process_no_noise():
         parameter_labels=["a", "b"],
         condition_parameters=True,
         condition_data=True,
-        learning_rate=0.25,
-        train_iterations=25,
+        learning_rate=0.7,
+        train_iterations=250,
     )
 
     model.add_training_data(
@@ -24,7 +24,7 @@ def test_gaussian_process_no_noise():
     )
 
     assert numpy.isclose(value, 1.0)
-    # assert numpy.isclose(uncertainty, 0.0)
+    assert numpy.isclose(uncertainty, 0.0)
 
     model.add_training_data(
         {"a": numpy.array([1.0]), "b": numpy.array([1.0])},
