@@ -258,8 +258,8 @@ class SurrogateModel(abc.ABC):
         self._value_shift = None
 
         # Define some useful torch constants
-        self._zero = torch.tensor(0.0, dtype=torch.float64)
-        self._one = torch.tensor(1.0, dtype=torch.float64)
+        self._zero = torch.tensor(0.0, dtype=torch.float32)
+        self._one = torch.tensor(1.0, dtype=torch.float32)
 
         # Define the hull we will use to check whether the parameters
         # to evaluate lie within the models region of confidence.
@@ -287,7 +287,7 @@ class SurrogateModel(abc.ABC):
         """
 
         array_parameters = parameter_dict_to_array(parameters, self._parameter_labels)
-        return torch.from_numpy(array_parameters)
+        return torch.from_numpy(array_parameters).float()
 
     def _validate_training_data(
         self,
@@ -335,8 +335,8 @@ class SurrogateModel(abc.ABC):
 
         assert uncertainties.shape == values.shape
 
-        values = torch.from_numpy(values)
-        uncertainties = torch.from_numpy(uncertainties)
+        values = torch.from_numpy(values).float()
+        uncertainties = torch.from_numpy(uncertainties).float()
 
         return parameters, values, uncertainties
 
@@ -450,10 +450,10 @@ class SurrogateModel(abc.ABC):
         else:
 
             self._parameter_shift = torch.zeros(
-                (1, parameters.shape[1]), dtype=torch.float64
+                (1, parameters.shape[1]), dtype=torch.float32
             )
             self._parameter_scale = torch.ones(
-                (1, parameters.shape[1]), dtype=torch.float64
+                (1, parameters.shape[1]), dtype=torch.float32
             )
 
         if self._condition_data:
@@ -473,8 +473,8 @@ class SurrogateModel(abc.ABC):
 
         else:
 
-            self._value_shift = torch.zeros((1,), dtype=torch.float64)
-            self._value_scale = torch.ones((1,), dtype=torch.float64)
+            self._value_shift = torch.zeros((1,), dtype=torch.float32)
+            self._value_scale = torch.ones((1,), dtype=torch.float32)
 
         # Condition the data.
         self._training_parameters = (
