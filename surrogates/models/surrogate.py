@@ -145,12 +145,12 @@ class GaussianProcess(SurrogateModel):
 
         if self._double_precision:
 
-            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            with torch.no_grad():
                 prediction = self._likelihood(self._model(parameters))
 
         else:
 
-            with torch.no_grad():
+            with torch.no_grad(), gpytorch.settings.fast_pred_var():
                 prediction = self._likelihood(self._model(parameters))
 
         values = (prediction.mean * self._value_scale + self._value_shift).numpy()
