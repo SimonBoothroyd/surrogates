@@ -4,9 +4,11 @@ import os
 import pickle
 from collections import defaultdict
 from glob import glob
+from typing import Dict, Optional, Tuple
 
 import numpy
 from matplotlib import animation, pyplot
+from matplotlib.lines import Line2D
 
 from surrogates.drivers.compute import SurrogateDriverSnapshot
 from surrogates.utils.numpy import parameter_dict_to_array
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnimatedCornerPlot:
-    def __init__(self, snapshot_directory):
+    def __init__(self, snapshot_directory: str) -> None:
         """
 
         Parameters
@@ -43,7 +45,10 @@ class AnimatedCornerPlot:
         self._simulation_parameters = {}
         self._reweighted_parameters = {}
 
-    def _load_all_parameters(self):
+    def _load_all_parameters(self) -> None:
+        """Loads all of the model parameters from each of the
+        snapshots.
+        """
 
         # Extract the names of the parameters
         with open(self._snapshot_file_names[0], "rb") as file:
@@ -92,7 +97,10 @@ class AnimatedCornerPlot:
 
         self._drop_untrained_parameters()
 
-    def _drop_untrained_parameters(self):
+    def _drop_untrained_parameters(self) -> None:
+        """Removes any parameters which the surrogate model was not
+        trained upon for the parameter arrays.
+        """
 
         for property_type in self._min_parameters:
 
@@ -125,7 +133,35 @@ class AnimatedCornerPlot:
             self._parameter_labels[property_type] = parameter_labels
             self._all_parameters[property_type] = all_parameters
 
-    def _setup_axes(self, axes, property_type):
+    def _setup_axes(
+        self, axes: numpy.ndarray, property_type: str
+    ) -> Tuple[
+        Dict[Tuple[int, int], Line2D],
+        Dict[Tuple[int, int], Line2D],
+        Dict[Tuple[int, int], Line2D],
+        Dict[Tuple[int, int], Line2D],
+    ]:
+        """Set up the figure axes, settings limits, labels and
+        creating the line brushes.
+
+        Parameters
+        ----------
+        axes: numpy.ndarray
+            The axes to set up.
+        property_type: str
+            The property type of interest.
+
+        Returns
+        -------
+        Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the convex hull.
+        Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the reweighted points.
+        Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the simulated points.
+        Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the parameter trace.
+        """
 
         trace_lines = {}
         hull_lines = {}
@@ -181,7 +217,19 @@ class AnimatedCornerPlot:
 
         return hull_lines, reweighted_points, simulation_points, trace_lines
 
-    def _update_training_data(self, property_type, snapshot_data):
+    def _update_training_data(
+        self, property_type: str, snapshot_data: SurrogateDriverSnapshot
+    ) -> None:
+        """Appends the current snapshots training data onto the
+        previously loaded training data.
+
+        Parameters
+        ----------
+        property_type: str
+            The property type the model was trained upon.
+        snapshot_data: SurrogateDriverSnapshot
+            The current snapshot which contains the training data.
+        """
 
         if len(snapshot_data.simulation_training_parameters) <= 0:
             return
@@ -228,14 +276,38 @@ class AnimatedCornerPlot:
 
     def _animate(
         self,
-        index,
-        property_type,
-        n_rolling_parameters,
-        trace_lines,
-        hull_lines,
-        reweighted_points,
-        simulation_points,
-    ):
+        index: int,
+        property_type: str,
+        n_rolling_parameters: int,
+        trace_lines: Dict[Tuple[int, int], Line2D],
+        hull_lines: Dict[Tuple[int, int], Line2D],
+        reweighted_points: Dict[Tuple[int, int], Line2D],
+        simulation_points: Dict[Tuple[int, int], Line2D],
+    ) -> Tuple[Line2D, Line2D, Line2D, Line2D]:
+        """Renders a single frame of the animation
+
+        Parameters
+        ----------
+        index: int
+            The index of the frame to render.
+        property_type: str
+            The property type of interest.
+        n_rolling_parameters: int
+            The number of previous trace points to plot.
+        trace_lines: Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the parameter trace.
+        hull_lines: Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the convex hull.
+        reweighted_points: Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the reweighted points.
+        simulation_points: Dict[Tuple[int, int], Line2D]
+            The brushes used to draw the simulated points.
+
+        Returns
+        -------
+        Tuple[Line2D, Line2D, Line2D, Line2D]
+            The brushes used during the rendering.
+        """
 
         parameter_labels = self._parameter_labels[property_type]
 
@@ -296,11 +368,27 @@ class AnimatedCornerPlot:
 
     def plot(
         self,
-        property_type,
-        n_rolling_parameters,
-        file_name=None,
-        figure_size=(5.0, 5.0),
+        property_type: str,
+        n_rolling_parameters: int,
+        file_name: Optional[str] = None,
+        figure_size: Tuple[float, float] = (5.0, 5.0),
     ):
+        """Produce an animated plot of a previously ran optimization.
+
+        Parameters
+        ----------
+        property_type: str
+            The property type of interest.
+        n_rolling_parameters:
+            The number of model parameters to show
+            at any one time.
+        file_name: str, optional
+            The file name to save the animation to. If
+            None, the `property_type` will be used to
+            choose the file name.
+        figure_size: tuple of float, float
+            The size of the figure to produce.
+        """
 
         # Create the figure and axis
         n_axes = len(self._parameter_labels[property_type]) - 1
