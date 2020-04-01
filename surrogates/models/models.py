@@ -3,13 +3,12 @@ from typing import Dict, List, Tuple
 
 import numpy
 import torch
-from numpy import ndarray
 from scipy.spatial.qhull import Delaunay
 
 from surrogates.drivers import Driver
 from surrogates.likelihoods.likelihoods import Likelihood
 from surrogates.utils.distributions import Distribution
-from surrogates.utils.numpy import parameter_dict_to_array
+from surrogates.utils.numpy import add_parameter_dicts, parameter_dict_to_array
 
 
 class BayesianModel(abc.ABC):
@@ -115,7 +114,9 @@ class BayesianModel(abc.ABC):
                 f"as being both fixed and trainable."
             )
 
-    def evaluate_log_prior(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
+    def evaluate_log_prior(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluates the log value of the prior for a
         set of parameters.
 
@@ -130,17 +131,25 @@ class BayesianModel(abc.ABC):
         numpy.ndarray
             The sum of the log values of priors evaluated at `parameters`
             with shape=(n_sets,).
+        dict of str and numpy.ndarray
+            The gradient of with respect to the input parameters
+            with shape=(n_sets,).
         """
         log_prior = numpy.zeros(len(next(iter(parameters.values()))))
+        log_prior_gradient = {x: numpy.zeros(len(log_prior)) for x in parameters}
 
         for labels, prior in self._priors.items():
 
             parameter = numpy.concatenate([parameters[label] for label in labels])
             log_prior += numpy.ravel(prior.log_pdf(parameter))
 
-        return log_prior
+            log_prior_gradient[labels[0]] += prior.log_pdf_gradient(parameter, 1.0)
 
-    def evaluate_log_likelihood(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
+        return log_prior, log_prior_gradient
+
+    def evaluate_log_likelihood(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluates the log value of the likelihood for a
         set of parameters.
 
@@ -155,27 +164,47 @@ class BayesianModel(abc.ABC):
         numpy.ndarray
             The sum of the log values of likelihood evaluated at `parameters`
             with shape=(n_sets,).
+        dict of str and numpy.ndarray
+            The gradient of with respect to the input parameters
+            with shape=(n_sets,).
         """
         all_parameters = {}
         all_parameters.update(parameters)
         all_parameters.update(self._fixed_parameters)
 
-        log_prior = numpy.zeros(len(next(iter(all_parameters.values()))))
-
         targets = [x.driver_target for x in self._likelihoods]
 
-        evaluated_values, evaluated_uncertainties = self._driver.evaluate(
-            targets, all_parameters
-        )
+        (
+            evaluated_values,
+            evaluated_uncertainties,
+            evaluated_gradients,
+        ) = self._driver.evaluate(targets, all_parameters, compute_gradients=True)
 
-        for likelihood, values, uncertainties in zip(
-            self._likelihoods, evaluated_values, evaluated_uncertainties
+        total_log_p = numpy.zeros(len(next(iter(all_parameters.values()))))
+        total_log_p_gradient = {x: numpy.zeros(len(total_log_p)) for x in parameters}
+
+        for likelihood, values, uncertainties, gradients in zip(
+            self._likelihoods,
+            evaluated_values,
+            evaluated_uncertainties,
+            evaluated_gradients,
         ):
-            log_prior += likelihood.evaluate(values, uncertainties)
 
-        return log_prior
+            log_p, log_p_gradient = likelihood.evaluate(
+                values, uncertainties, gradients
+            )
+            log_p_gradient = {x: log_p_gradient[x] for x in parameters}
 
-    def evaluate(self, parameters: Dict[str, ndarray]) -> numpy.ndarray:
+            total_log_p += log_p
+            total_log_p_gradient = add_parameter_dicts(
+                total_log_p_gradient, log_p_gradient
+            )
+
+        return total_log_p, total_log_p_gradient
+
+    def evaluate(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluate the log posterior of this model at the specified
         sets of parameters.
 
@@ -189,11 +218,22 @@ class BayesianModel(abc.ABC):
         -------
         numpy.ndarray
             The evaluated log p with shape=(n_sets,).
+        dict of str and numpy.ndarray
+            The gradient of with respect to the input parameters
+            with shape=(n_sets,).
         """
 
-        return self.evaluate_log_prior(parameters) + self.evaluate_log_likelihood(
+        log_prior, log_prior_gradient = self.evaluate_log_prior(parameters)
+        log_likelihood, log_likelihood_gradient = self.evaluate_log_likelihood(
             parameters
         )
+
+        log_posterior = log_prior + log_likelihood
+        log_posterior_gradient = add_parameter_dicts(
+            log_prior_gradient, log_likelihood_gradient
+        )
+
+        return log_posterior, log_posterior_gradient
 
 
 class SurrogateModel(abc.ABC):
@@ -553,7 +593,7 @@ class SurrogateModel(abc.ABC):
     @abc.abstractmethod
     def evaluate(
         self, parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    ) -> Tuple[numpy.ndarray, numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluate the model at the specified set of parameters.
 
         Parameters
@@ -568,6 +608,9 @@ class SurrogateModel(abc.ABC):
             The evaluated model values with shape=(n_data_points,)
         numpy.ndarray
             The uncertainty (assumed to be Gaussian) in each evaluated value
+            with shape=(n_data_points,)
+        dict of str and numpy.ndarray
+            The gradient of each evaluated value with respect to the parameters
             with shape=(n_data_points,)
         """
         raise NotImplementedError()

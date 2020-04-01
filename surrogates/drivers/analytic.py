@@ -1,8 +1,10 @@
 import os
 from typing import Dict, List, Optional, Tuple
 
+import autograd.numpy
 import numpy
 import yaml
+from autograd import grad
 from pkg_resources import resource_filename
 
 from surrogates.drivers import Driver
@@ -374,7 +376,7 @@ class StollWerthDriver(Driver):
 
         tau = t_c_star - temperature_star
 
-        if numpy.all(tau > 0):
+        if autograd.numpy.all(tau > 0):
 
             coefficient_1 = self._correlation_function_1(
                 quadrupole_star, bond_length_star, _b_C1
@@ -502,7 +504,7 @@ class StollWerthDriver(Driver):
         )
         c3 = q ** 2 * _b_c3[0] + q ** 5 * _b_c3[1] + l ** 0.5 * _b_c3[2]
 
-        vapor_pressure_star = numpy.exp(
+        vapor_pressure_star = autograd.numpy.exp(
             c1 + c2 / temperature_star + c3 / (temperature_star ** 4)
         )
         return vapor_pressure_star
@@ -651,7 +653,8 @@ class StollWerthDriver(Driver):
         property_type: str,
         temperatures: numpy.ndarray,
         parameters: Dict[str, numpy.ndarray],
-    ) -> numpy.ndarray:
+        compute_gradients: bool,
+    ) -> Tuple[numpy.ndarray, Optional[Dict[str, numpy.ndarray]]]:
 
         property_functions = {
             "liquid_density": self._liquid_density,
@@ -663,31 +666,69 @@ class StollWerthDriver(Driver):
             **parameters, temperature=temperatures
         ).reshape(-1, 1)
 
-        return values
+        gradients = None
+
+        if compute_gradients:
+
+            gradient_functions = {
+                x: grad(y, argnum=(0, 1, 2, 3)) for x, y in property_functions.items()
+            }
+
+            gradients = gradient_functions[property_type](
+                parameters["epsilon"],
+                parameters["sigma"],
+                parameters["bond_length"],
+                parameters["quadrupole"],
+                temperature=temperatures,
+            )
+
+            gradients = {
+                "epsilon": numpy.ravel(gradients[0]),
+                "sigma": numpy.ravel(gradients[1]),
+                "bond_length": numpy.ravel(gradients[2]),
+                "quadrupole": numpy.ravel(gradients[3]),
+            }
+
+        return values, gradients
 
     def evaluate(
-        self, targets: List[StollWerthTarget], parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        self,
+        targets: List[StollWerthTarget],
+        parameters: Dict[str, numpy.ndarray],
+        compute_gradients: bool,
+    ) -> Tuple[
+        List[numpy.ndarray],
+        List[numpy.ndarray],
+        Optional[List[Dict[str, numpy.ndarray]]],
+    ]:
 
         values = []
         uncertainties = []
+
+        gradients = []
 
         for target in targets:
 
             assert isinstance(target, StollWerthTarget)
 
-            noiseless_values = self._evaluate_analytical(
-                target.property_type, target.temperatures, parameters
+            noiseless_values, noiseless_gradients = self._evaluate_analytical(
+                target.property_type, target.temperatures, parameters, compute_gradients
             )
 
             property_uncertainties = noiseless_values * self._fractional_noise
-            property_values = (
-                noiseless_values
-                + numpy.random.randn(*property_uncertainties.shape)
-                * property_uncertainties
-            )
+            noise = numpy.random.randn(*property_uncertainties.shape)
+
+            property_values = noiseless_values + noise * property_uncertainties
+
+            property_gradients = {
+                x: noiseless_gradients[x]
+                + noise * self._fractional_noise * noiseless_gradients[x]
+                for x in noiseless_gradients
+            }
 
             values.append(property_values)
             uncertainties.append(property_uncertainties)
 
-        return values, uncertainties
+            gradients.append(property_gradients)
+
+        return values, uncertainties, gradients if compute_gradients else None

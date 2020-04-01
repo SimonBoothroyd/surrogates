@@ -3,7 +3,7 @@ This module implements a samplers based off of the
 Metropolis-Hasting acceptance criteria. These samplers
 do not require nor make use of gradient information.
 """
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy
 import torch
@@ -31,7 +31,6 @@ class Metropolis(Sampler):
 
     def __init__(
         self,
-        log_p_function: Callable[[Dict[str, numpy.ndarray]], numpy.ndarray],
         model: BayesianModel,
         proposal_sizes: Dict[str, numpy.ndarray],
         acceptance_target: float = 0.5,
@@ -49,10 +48,17 @@ class Metropolis(Sampler):
             The number of steps to take before attempting to
             tune the parameters.
         """
-        super().__init__(log_p_function, model)
+        super().__init__(model)
 
         assert 0.0 < acceptance_target <= 1.0
         self._acceptance_target = acceptance_target
+
+        for label in proposal_sizes:
+
+            if not isinstance(proposal_sizes[label], float):
+                continue
+
+            proposal_sizes[label] = numpy.array([proposal_sizes[label]])
 
         self.proposal_sizes = proposal_sizes
 
@@ -78,7 +84,7 @@ class Metropolis(Sampler):
             ]
         )
 
-        proposed_log_p = self._log_p_function(proposed_parameters)
+        proposed_log_p, _ = self._log_p_function(proposed_parameters)
 
         alpha = proposed_log_p - log_p
 

@@ -1,7 +1,7 @@
 import copy
 import os
 import pickle
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy
 
@@ -140,8 +140,8 @@ class SurrogateDriver(Driver):
                         parameters[parameter_label] * scale_amount
                     )
 
-                    values, uncertainties = self._reweighting_driver.evaluate(
-                        [target], perturbed_parameters
+                    values, uncertainties, _ = self._reweighting_driver.evaluate(
+                        [target], perturbed_parameters, False
                     )
 
                     if (
@@ -202,8 +202,8 @@ class SurrogateDriver(Driver):
             return True
 
         # Simulate at the points that the model stopped
-        simulated_values, simulated_stds = self._simulation_driver.evaluate(
-            targets, parameters
+        simulated_values, simulated_stds, _ = self._simulation_driver.evaluate(
+            targets, parameters, False
         )
 
         if any(numpy.isnan(simulated_values)) or any(numpy.isnan(simulated_stds)):
@@ -280,8 +280,15 @@ class SurrogateDriver(Driver):
         return True
 
     def evaluate(
-        self, targets: List[PropertyTarget], parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        self,
+        targets: List[PropertyTarget],
+        parameters: Dict[str, numpy.ndarray],
+        compute_gradients: bool,
+    ) -> Tuple[
+        List[numpy.ndarray],
+        List[numpy.ndarray],
+        Optional[List[Dict[str, numpy.ndarray]]],
+    ]:
 
         assert all(isinstance(x, PropertyTarget) for x in targets)
         assert all(x.property_type in self._surrogate_models for x in targets)
@@ -320,11 +327,12 @@ class SurrogateDriver(Driver):
 
             evaluation_snapshot = SurrogateDriverSnapshot(
                 current_evaluation=self._current_evaluations,
-                current_parameters=target_parameters,
+                current_parameters=parameters,
             )
 
         values = []
         uncertainties = []
+        gradients = []
 
         if len(targets_to_retrain) > 0:
 
@@ -338,17 +346,20 @@ class SurrogateDriver(Driver):
 
                 values = [numpy.array([numpy.nan])] * len(targets)
                 uncertainties = [numpy.array([numpy.nan])] * len(targets)
+                gradients = None
 
-                return values, uncertainties
+                return values, uncertainties, gradients
 
         for target in targets:
 
-            value, uncertainty = self._surrogate_models[target.property_type].evaluate(
-                target_parameters[target.property_type]
-            )
+            value, uncertainty, gradient = self._surrogate_models[
+                target.property_type
+            ].evaluate(target_parameters[target.property_type])
 
             values.append(value)
             uncertainties.append(uncertainty)
+
+            gradients.append(gradient)
 
         # Save the snapshot to disk
         if evaluation_snapshot is not None:
@@ -360,4 +371,4 @@ class SurrogateDriver(Driver):
 
                 pickle.dump(evaluation_snapshot, file)
 
-        return values, uncertainties
+        return values, uncertainties, gradients if compute_gradients else None

@@ -1,4 +1,5 @@
 import abc
+from typing import Dict, Tuple
 
 import numpy
 
@@ -45,8 +46,11 @@ class Likelihood(abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-        self, values: numpy.ndarray, uncertainties: numpy.ndarray
-    ) -> numpy.ndarray:
+        self,
+        values: numpy.ndarray,
+        uncertainties: numpy.ndarray,
+        gradients: Dict[str, numpy.ndarray],
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluates the likelihood for an evaluated set of values.
 
         Parameters
@@ -55,11 +59,17 @@ class Likelihood(abc.ABC):
             The values evaluated by the model.
         uncertainties: numpy.ndarray
             The uncertainties in the evaluated values.
+        gradients: dict of str and numpy.ndarray
+            The gradients of the evaluated values with respect
+            to the input parameters.
 
         Returns
         -------
         numpy.ndarray:
             The evaluated likelihoods with shape=(n_sets,).
+        dict of str and numpy.ndarray:
+            The gradient of the evaluated likelihood with respect to
+            the input parameters.
         """
         raise NotImplementedError()
 
@@ -69,19 +79,26 @@ class GaussianLikelihood(Likelihood):
     a set of data."""
 
     def evaluate(
-        self, values: numpy.ndarray, uncertainties: numpy.ndarray
-    ) -> numpy.ndarray:
+        self,
+        values: numpy.ndarray,
+        uncertainties: numpy.ndarray,
+        gradients: Dict[str, numpy.ndarray],
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
 
         if any(numpy.isnan(values)) or any(numpy.isinf(values)):
-            return -numpy.inf
+            return -numpy.inf, {x: numpy.array([numpy.inf]) for x in gradients}
 
         combined_uncertainties = numpy.sqrt(
             uncertainties * uncertainties + self._uncertainties * self._uncertainties
         )
 
         # Compute likelihood based on gaussian penalty function
-        log_p = numpy.sum(
-            distributions.Normal(values, combined_uncertainties).log_pdf(self._values)
-        )
+        distribution = distributions.Normal(self._values, combined_uncertainties)
 
-        return log_p
+        log_p = numpy.sum(distribution.log_pdf(values))
+        log_p_gradient = {
+            x: numpy.sum(distribution.log_pdf_gradient(values, gradients[x]))
+            for x in gradients
+        }
+
+        return log_p, log_p_gradient
