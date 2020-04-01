@@ -24,7 +24,7 @@ def main():
         model,
         momentum_scales={"a": numpy.array([1.0 / std_dev])},
         step_size=1.0,
-        n_steps=10
+        n_steps=10,
     )
 
     # Run the simulation.

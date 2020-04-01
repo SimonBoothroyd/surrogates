@@ -6,16 +6,12 @@ from surrogates.kernels.samplers.hmc import Hamiltonian
 from surrogates.models.simple import UnconditionedModel
 from surrogates.utils.distributions import Normal
 from surrogates.utils.file import change_directory
-from surrogates.utils.plotting import plot_log_p, plot_trace, plot_corner
+from surrogates.utils.plotting import plot_corner, plot_log_p, plot_trace
 
 
 def main():
 
-    std_devs = {
-        "a": 0.05,
-        "b": 50.0,
-        "c": 5000.0
-    }
+    std_devs = {"a": 0.05, "b": 50.0, "c": 5000.0}
 
     priors = {
         "a": Normal(numpy.array([0.0]), numpy.array([std_devs["a"]])),
@@ -40,7 +36,7 @@ def main():
             "c": numpy.array([1.0 / std_devs["c"]]),
         },
         step_size=1.0,
-        n_steps=10
+        n_steps=10,
     )
 
     # Run the simulation.

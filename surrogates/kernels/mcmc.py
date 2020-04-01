@@ -204,7 +204,9 @@ class MCMCSimulation:
 
         return proposed_parameters, proposed_log_p, acceptance
 
-    def _evaluate_log_p(self, parameters: Dict[str, numpy.ndarray]) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
+    def _evaluate_log_p(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluates the (possibly un-normalized) target distribution
         for the given set of parameters.
 
