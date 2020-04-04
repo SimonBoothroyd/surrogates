@@ -6,7 +6,7 @@ import numpy
 def finite_difference(
     function: Callable,
     parameters: Dict[str, numpy.ndarray],
-    perturbation_fraction: float=1.001
+    perturbation_fraction: float = 1.001,
 ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
     """A function which calculates the forward finite difference
     gradient of a function with respect to each of its parameters.

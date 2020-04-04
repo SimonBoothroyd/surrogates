@@ -655,7 +655,6 @@ class StollWerthDriver(Driver):
         parameters: Dict[str, numpy.ndarray],
         compute_gradients: bool,
     ) -> Tuple[numpy.ndarray, Optional[Dict[str, numpy.ndarray]]]:
-
         def wrapper(function, parameter_dict):
             return function(**parameter_dict, temperature=temperatures)
 

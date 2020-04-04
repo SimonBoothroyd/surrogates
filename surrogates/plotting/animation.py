@@ -105,9 +105,7 @@ class AnimatedCornerPlot:
         index_mask[flat_parameter_indices] = 0
 
         parameter_labels = [
-            x
-            for i, x in enumerate(parameter_labels)
-            if i not in flat_parameter_indices
+            x for i, x in enumerate(parameter_labels) if i not in flat_parameter_indices
         ]
 
         min_parameters = min_parameters[index_mask]

@@ -13,7 +13,7 @@ def test_finite_difference():
     initial_parameters = {
         "a": numpy.array([1.0]),
         "b": numpy.array([1.0]),
-        "c": numpy.array([1.0])
+        "c": numpy.array([1.0]),
     }
 
     value, gradients = finite_difference(function, initial_parameters)
