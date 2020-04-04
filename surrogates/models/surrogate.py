@@ -135,7 +135,7 @@ class GaussianProcess(SurrogateModel):
 
     def evaluate(
         self, parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[numpy.ndarray, numpy.ndarray]:
+    ) -> Tuple[numpy.ndarray, numpy.ndarray, Dict[str, numpy.ndarray]]:
 
         if self._model is None:
             raise ValueError("The model has not yet been trained upon any data.")
@@ -143,17 +143,24 @@ class GaussianProcess(SurrogateModel):
         parameters = self._parameter_dict_to_tensor(parameters)
         parameters = (parameters - self._parameter_shift) / self._parameter_scale
 
+        parameters.requires_grad = True
+
         if self._double_precision:
 
-            with torch.no_grad():
-                prediction = self._likelihood(self._model(parameters))
+            prediction = self._likelihood(self._model(parameters))
 
         else:
 
-            with torch.no_grad(), gpytorch.settings.fast_pred_var():
+            with gpytorch.settings.fast_pred_var():
                 prediction = self._likelihood(self._model(parameters))
 
-        values = (prediction.mean * self._value_scale + self._value_shift).numpy()
-        uncertainties = (prediction.stddev * self._value_scale).numpy()
+        values = prediction.mean * self._value_scale + self._value_shift
+        uncertainties = prediction.stddev * self._value_scale
 
-        return values, uncertainties
+        # Compute the gradient
+        values.backward()
+
+        gradients = (parameters.grad * self._parameter_scale).numpy()
+        gradients = {x: gradients[:, i] for i, x in enumerate(self._parameter_labels)}
+
+        return values.detach().numpy(), uncertainties.detach().numpy(), gradients

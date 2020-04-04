@@ -46,3 +46,25 @@ def parameter_dict_to_array(
         array_parameters[:, parameter_index] = parameter[:, 0]
 
     return array_parameters
+
+
+def add_parameter_dicts(
+    value_a: Dict[str, numpy.ndarray], value_b: Dict[str, numpy.ndarray]
+) -> Dict[str, numpy.ndarray]:
+    """Adds two parameter dictionaries together.
+
+    Parameters
+    ----------
+    value_a: dict of str and numpy.ndarray
+        The first set of parameters..
+    value_b: dict of str and numpy.ndarray
+        The second set of parameters..
+
+    Returns
+    -------
+    dict of str and numpy.ndarray
+        The summed parameters.
+    """
+
+    assert len(value_a) == len(value_b)
+    return {x: y + value_b[x] for x, y in value_a.items()}

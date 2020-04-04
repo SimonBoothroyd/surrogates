@@ -1,3 +1,4 @@
+import functools
 import os
 from typing import Dict, List, Optional, Tuple
 
@@ -7,6 +8,7 @@ from pkg_resources import resource_filename
 
 from surrogates.drivers import Driver
 from surrogates.drivers.targets import PropertyTarget
+from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthTarget(PropertyTarget):
@@ -651,43 +653,74 @@ class StollWerthDriver(Driver):
         property_type: str,
         temperatures: numpy.ndarray,
         parameters: Dict[str, numpy.ndarray],
-    ) -> numpy.ndarray:
+        compute_gradients: bool,
+    ) -> Tuple[numpy.ndarray, Optional[Dict[str, numpy.ndarray]]]:
+        def wrapper(function, parameter_dict):
+            return function(**parameter_dict, temperature=temperatures)
 
         property_functions = {
-            "liquid_density": self._liquid_density,
-            "vapor_pressure": self._vapor_pressure,
-            "surface_tension": self._surface_tension,
+            "liquid_density": functools.partial(wrapper, self._liquid_density),
+            "vapor_pressure": functools.partial(wrapper, self._vapor_pressure),
+            "surface_tension": functools.partial(wrapper, self._surface_tension),
         }
 
-        values = property_functions[property_type](
-            **parameters, temperature=temperatures
-        ).reshape(-1, 1)
+        if compute_gradients:
 
-        return values
+            property_functions = {
+                x: functools.partial(finite_difference, y)
+                for x, y in property_functions.items()
+            }
+
+        values = property_functions[property_type](parameters)
+        gradients = None
+
+        if compute_gradients:
+            values, gradients = values
+
+        values = values.reshape(-1, 1)
+
+        return values, gradients
 
     def evaluate(
-        self, targets: List[StollWerthTarget], parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        self,
+        targets: List[StollWerthTarget],
+        parameters: Dict[str, numpy.ndarray],
+        compute_gradients: bool,
+    ) -> Tuple[
+        List[numpy.ndarray],
+        List[numpy.ndarray],
+        Optional[List[Dict[str, numpy.ndarray]]],
+    ]:
 
         values = []
         uncertainties = []
+
+        gradients = []
 
         for target in targets:
 
             assert isinstance(target, StollWerthTarget)
 
-            noiseless_values = self._evaluate_analytical(
-                target.property_type, target.temperatures, parameters
+            noiseless_values, noiseless_gradients = self._evaluate_analytical(
+                target.property_type, target.temperatures, parameters, compute_gradients
             )
 
             property_uncertainties = noiseless_values * self._fractional_noise
-            property_values = (
-                noiseless_values
-                + numpy.random.randn(*property_uncertainties.shape)
-                * property_uncertainties
-            )
+            noise = numpy.random.randn(*property_uncertainties.shape)
+
+            property_values = noiseless_values + noise * property_uncertainties
 
             values.append(property_values)
             uncertainties.append(property_uncertainties)
 
-        return values, uncertainties
+            if compute_gradients:
+
+                property_gradients = {
+                    x: noiseless_gradients[x]
+                    + noise * self._fractional_noise * noiseless_gradients[x]
+                    for x in noiseless_gradients
+                }
+
+                gradients.append(property_gradients)
+
+        return values, uncertainties, gradients if compute_gradients else None

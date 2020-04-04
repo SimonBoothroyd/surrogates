@@ -7,8 +7,8 @@ from pkg_resources import resource_filename
 from surrogates.datasets import DataSet
 from surrogates.drivers.analytic import StollWerthDriver, StollWerthTarget
 from surrogates.likelihoods.likelihoods import GaussianLikelihood
-from surrogates.models.simple import TwoCenterLennardJones
-from surrogates.utils.distributions import Uniform
+from surrogates.models.simple import TwoCenterLennardJones, UnconditionedModel
+from surrogates.utils.distributions import Normal, Uniform
 
 
 @pytest.fixture
@@ -102,5 +102,32 @@ def test_2clj_likelihood(reference_data_set):
         "sigma": numpy.array([0.37964502]),
     }
 
-    log_p = model.evaluate_log_likelihood(map_parameters)
+    log_p, _ = model.evaluate_log_likelihood(map_parameters)
     assert numpy.isclose(log_p, -21.27155532219009)
+
+
+def test_1_d_gaussian_prior_model():
+
+    priors = {"a": Normal(numpy.array([0.0]), numpy.array([1.0]))}
+    model = UnconditionedModel(priors)
+
+    value, gradient = model.evaluate({"a": numpy.array([0.0])})
+    assert numpy.isclose(value, -numpy.log(numpy.sqrt(2 * numpy.pi)))
+    assert numpy.isclose(gradient["a"], 0.0)
+
+    _, gradient = model.evaluate({"a": numpy.array([0.5])})
+    assert numpy.isclose(gradient["a"], -0.5)
+
+
+def test_2_d_gaussian_prior_model():
+
+    priors = {
+        "a": Normal(numpy.array([0.0]), numpy.array([1.0])),
+        "b": Normal(numpy.array([0.0]), numpy.array([1.0])),
+    }
+    model = UnconditionedModel(priors)
+
+    _, gradient = model.evaluate({"a": numpy.array([0.0]), "b": numpy.array([0.5])})
+
+    assert numpy.isclose(gradient["a"], 0.0)
+    assert numpy.isclose(gradient["b"], -0.5)

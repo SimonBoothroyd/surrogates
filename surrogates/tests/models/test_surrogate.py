@@ -20,12 +20,14 @@ def test_gaussian_process_no_noise():
         numpy.array([0.0]),
     )
 
-    value, uncertainty = model.evaluate(
+    value, uncertainty, gradients = model.evaluate(
         {"a": numpy.array([0.0]), "b": numpy.array([0.0])}
     )
 
     assert numpy.isclose(value, 1.0)
     assert numpy.isclose(uncertainty, 0.0)
+    assert "a" in gradients and "b" in gradients
+    assert all(x is not None and not numpy.isnan(x) for x in gradients.values())
 
     model.add_training_data(
         {"a": numpy.array([1.0]), "b": numpy.array([1.0])},
@@ -33,16 +35,18 @@ def test_gaussian_process_no_noise():
         numpy.array([0.0]),
     )
 
-    value, uncertainty = model.evaluate(
+    value, uncertainty, gradients = model.evaluate(
         {"a": numpy.array([0.0]), "b": numpy.array([0.0])}
     )
 
     assert numpy.isclose(value, 1.0)
     assert numpy.isclose(uncertainty, 0.0)
+    assert all(x is not None and not numpy.isnan(x) for x in gradients.values())
 
-    value, uncertainty = model.evaluate(
+    value, uncertainty, gradients = model.evaluate(
         {"a": numpy.array([1.0]), "b": numpy.array([1.0])}
     )
 
     assert numpy.isclose(value, 4.0)
     assert numpy.isclose(uncertainty, 0.0)
+    assert all(x is not None and not numpy.isnan(x) for x in gradients.values())

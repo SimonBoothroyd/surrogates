@@ -10,6 +10,5 @@ def test_gaussian_likelihood():
 
     likelihood = GaussianLikelihood(values, uncertainties, None)
 
-    assert numpy.isclose(
-        likelihood.evaluate(values, uncertainties), -numpy.log(numpy.sqrt(2 * numpy.pi))
-    )
+    value, _ = likelihood.evaluate(values, uncertainties, {})
+    assert numpy.isclose(value, -numpy.log(numpy.sqrt(2 * numpy.pi)))

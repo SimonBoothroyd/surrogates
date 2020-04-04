@@ -3,7 +3,7 @@ A set of common distributions which are differentiable with
 autograd.
 """
 import abc
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 import numpy
 import torch.distributions
@@ -20,6 +20,11 @@ class Distribution(Serializable, abc.ABC):
 
     @abc.abstractmethod
     def log_pdf(self, x: numpy.ndarray) -> numpy.ndarray:
+        raise NotImplementedError()
+
+    def log_pdf_gradient(
+        self, x: numpy.ndarray, x_gradient: numpy.ndarray
+    ) -> numpy.ndarray:
         raise NotImplementedError()
 
 
@@ -97,7 +102,7 @@ class MultivariateNormal(MultivariateDistribution):
 
 
 class Exponential(Distribution):
-    def __init__(self, rate: numpy.ndarray):
+    def __init__(self, rate: Union[float, numpy.ndarray]):
         self.rate = rate
 
     def log_pdf(self, x: numpy.ndarray) -> numpy.ndarray:
@@ -106,6 +111,15 @@ class Exponential(Distribution):
             return -numpy.inf
 
         return numpy.log(self.rate) - self.rate * x
+
+    def log_pdf_gradient(
+        self, x: numpy.ndarray, x_gradient: numpy.ndarray
+    ) -> numpy.ndarray:
+
+        if numpy.any(x < 0.0):
+            return -numpy.inf
+
+        return -self.rate * x_gradient
 
     def sample(self) -> numpy.ndarray:
         return torch.distributions.Exponential(self.rate).rsample().item()
@@ -124,7 +138,9 @@ class Exponential(Distribution):
 
 
 class Normal(Distribution):
-    def __init__(self, loc: numpy.ndarray, scale: numpy.ndarray):
+    def __init__(
+        self, loc: Union[float, numpy.ndarray], scale: Union[float, numpy.ndarray]
+    ):
 
         self.loc = loc
         self.scale = scale
@@ -139,6 +155,11 @@ class Normal(Distribution):
             - log_scale
             - numpy.log(numpy.sqrt(2 * numpy.pi))
         )
+
+    def log_pdf_gradient(
+        self, x: numpy.ndarray, x_gradient: numpy.ndarray
+    ) -> numpy.ndarray:
+        return -(x - self.loc) * x_gradient / self.scale ** 2
 
     def sample(self) -> numpy.ndarray:
         return torch.distributions.Normal(self.loc, self.scale).rsample().item()
@@ -159,7 +180,11 @@ class Normal(Distribution):
 
 
 class Uniform(Distribution):
-    def __init__(self, low: numpy.ndarray = 0.0, high: numpy.ndarray = 1.0):
+    def __init__(
+        self,
+        low: Union[float, numpy.ndarray] = 0.0,
+        high: Union[float, numpy.ndarray] = 1.0,
+    ):
 
         self.low = low
         self.high = high

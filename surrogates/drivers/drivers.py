@@ -41,8 +41,13 @@ class Driver(abc.ABC):
 
     @abc.abstractmethod
     def evaluate(
-        self, targets: List[DriverTarget], parameters: Dict[str, numpy.ndarray]
-    ) -> Tuple[List[numpy.ndarray], List[numpy.ndarray]]:
+        self,
+        targets: List[DriverTarget],
+        parameters: Dict[str, numpy.ndarray],
+        compute_gradients: bool,
+    ) -> Tuple[
+        List[numpy.ndarray], List[numpy.ndarray], List[Dict[str, numpy.ndarray]]
+    ]:
         """Evaluates the specified properties at the provided
         parameters.
 
@@ -53,12 +58,18 @@ class Driver(abc.ABC):
         parameters: dict of str and numpy.ndarray
             The model parameters to evaluate at with shape(n_sets,)
             where n_sets is the number of parameter sets to evaluate at.
+        compute_gradients: bool
+            Whether to compute the
 
         Returns
         -------
-        numpy.ndarray
-            The evaluated values with shape=(n_sets,)
-        numpy.ndarray
-            The uncertainties in the evaluated values with shape=(n_sets,).
+        list of numpy.ndarray
+            The evaluated values of each target with shape=(n_sets,)
+        list of numpy.ndarray
+            The uncertainties in the evaluated values of each target
+            with shape=(n_sets,).
+        list of dict of str and numpy.ndarray, optional
+            The gradients of each evaluated value with respect to the input
+            parameters. This will be `None` if `compute_gradients` is `False`.
         """
         raise NotImplementedError()

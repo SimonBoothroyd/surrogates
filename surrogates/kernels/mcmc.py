@@ -68,7 +68,7 @@ class MCMCSimulation:
                 x: 0.01 if y <= 0.0 else y / 100.0
                 for x, y in initial_parameters.items()
             }
-            sampler = Metropolis(self._evaluate_log_p, self._model, proposal_sizes)
+            sampler = Metropolis(self._model, proposal_sizes)
 
         sampler.log_p_function = self._evaluate_log_p
         self._sampler = sampler
@@ -91,10 +91,16 @@ class MCMCSimulation:
 
     def _validate_parameters(self, initial_parameters: Dict[str, numpy.ndarray]):
 
-        initial_log_p = self._evaluate_log_p(initial_parameters)
+        initial_log_p, initial_gradients = self._evaluate_log_p(initial_parameters)
 
         if numpy.isnan(initial_log_p) or numpy.isinf(initial_log_p):
             raise ValueError(f"The initial log p is NaN / inf - {initial_log_p}")
+
+        if any(numpy.isnan(x) or numpy.isinf(x) for x in initial_gradients.values()):
+
+            raise ValueError(
+                f"The initial gradient of log p is NaN / inf - {initial_gradients}"
+            )
 
     def propagate(
         self, steps: int, warm_up: bool = False, progress_bar: bool = True
@@ -136,7 +142,7 @@ class MCMCSimulation:
 
         # Initialize the starting values.
         current_parameters = {x: y.copy() for x, y in self._initial_values.items()}
-        current_log_p = self._evaluate_log_p(current_parameters)
+        current_log_p, _ = self._evaluate_log_p(current_parameters)
 
         for i in range(steps):
 
@@ -198,7 +204,9 @@ class MCMCSimulation:
 
         return proposed_parameters, proposed_log_p, acceptance
 
-    def _evaluate_log_p(self, parameters: Dict[str, numpy.ndarray]) -> numpy.ndarray:
+    def _evaluate_log_p(
+        self, parameters: Dict[str, numpy.ndarray]
+    ) -> Tuple[numpy.ndarray, Dict[str, numpy.ndarray]]:
         """Evaluates the (possibly un-normalized) target distribution
         for the given set of parameters.
 
@@ -211,6 +219,8 @@ class MCMCSimulation:
         -------
         numpy.ndarray
             The evaluated log p (x).
+        dict of str and numpy.ndarray
+            The gradient of log p with respect to the parameters.
         """
         return self._model.evaluate(parameters)
 

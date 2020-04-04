@@ -36,16 +36,12 @@ class Sampler(abc.ABC):
         return self._accepted_moves
 
     def __init__(
-        self,
-        log_p_function: Callable[[Dict[str, numpy.ndarray]], numpy.ndarray],
-        model: BayesianModel,
+        self, model: BayesianModel,
     ):
         """Initializes self.
 
         Parameters
         ----------
-        log_p_function: function, optional
-            The log probability function to sample.
         model: BayesianModel
             The model whose parameters are being sampled.
         """
@@ -55,7 +51,7 @@ class Sampler(abc.ABC):
         self._log_p_function = None
         self._gradient_function = None
 
-        self.log_p_function = log_p_function
+        self._log_p_function = None
 
         self._model = model
 
