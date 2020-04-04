@@ -57,7 +57,7 @@ def test_evaluate(default_parameters, temperatures, property_type, expected_valu
         "bond_length": bond_length,
         "quadrupole": quadrupole,
     }
-    values, _ = driver.evaluate([driver_target], parameters)
+    values, _, _ = driver.evaluate([driver_target], parameters, True)
 
     assert numpy.isclose(values[0], expected_value)
 
@@ -83,7 +83,7 @@ def test_evaluate_vectorized(default_parameters, temperatures, property_type):
         "bond_length": bond_length,
         "quadrupole": quadrupole,
     }
-    values, uncertainties = driver.evaluate([driver_target], parameters)
+    values, uncertainties, _ = driver.evaluate([driver_target], parameters, False)
 
     assert len(values[0]) == len(temperatures)
     assert values[0].shape == uncertainties[0].shape

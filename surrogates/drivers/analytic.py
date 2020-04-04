@@ -1,14 +1,14 @@
+import functools
 import os
 from typing import Dict, List, Optional, Tuple
 
-import autograd.numpy
 import numpy
 import yaml
-from autograd import grad
 from pkg_resources import resource_filename
 
 from surrogates.drivers import Driver
 from surrogates.drivers.targets import PropertyTarget
+from surrogates.utils.gradients import finite_difference
 
 
 class StollWerthTarget(PropertyTarget):
@@ -376,7 +376,7 @@ class StollWerthDriver(Driver):
 
         tau = t_c_star - temperature_star
 
-        if autograd.numpy.all(tau > 0):
+        if numpy.all(tau > 0):
 
             coefficient_1 = self._correlation_function_1(
                 quadrupole_star, bond_length_star, _b_C1
@@ -504,7 +504,7 @@ class StollWerthDriver(Driver):
         )
         c3 = q ** 2 * _b_c3[0] + q ** 5 * _b_c3[1] + l ** 0.5 * _b_c3[2]
 
-        vapor_pressure_star = autograd.numpy.exp(
+        vapor_pressure_star = numpy.exp(
             c1 + c2 / temperature_star + c3 / (temperature_star ** 4)
         )
         return vapor_pressure_star
@@ -656,38 +656,29 @@ class StollWerthDriver(Driver):
         compute_gradients: bool,
     ) -> Tuple[numpy.ndarray, Optional[Dict[str, numpy.ndarray]]]:
 
+        def wrapper(function, parameter_dict):
+            return function(**parameter_dict, temperature=temperatures)
+
         property_functions = {
-            "liquid_density": self._liquid_density,
-            "vapor_pressure": self._vapor_pressure,
-            "surface_tension": self._surface_tension,
+            "liquid_density": functools.partial(wrapper, self._liquid_density),
+            "vapor_pressure": functools.partial(wrapper, self._vapor_pressure),
+            "surface_tension": functools.partial(wrapper, self._surface_tension),
         }
-
-        values = property_functions[property_type](
-            **parameters, temperature=temperatures
-        ).reshape(-1, 1)
-
-        gradients = None
 
         if compute_gradients:
 
-            gradient_functions = {
-                x: grad(y, argnum=(0, 1, 2, 3)) for x, y in property_functions.items()
+            property_functions = {
+                x: functools.partial(finite_difference, y)
+                for x, y in property_functions.items()
             }
 
-            gradients = gradient_functions[property_type](
-                parameters["epsilon"],
-                parameters["sigma"],
-                parameters["bond_length"],
-                parameters["quadrupole"],
-                temperature=temperatures,
-            )
+        values = property_functions[property_type](parameters)
+        gradients = None
 
-            gradients = {
-                "epsilon": numpy.ravel(gradients[0]),
-                "sigma": numpy.ravel(gradients[1]),
-                "bond_length": numpy.ravel(gradients[2]),
-                "quadrupole": numpy.ravel(gradients[3]),
-            }
+        if compute_gradients:
+            values, gradients = values
+
+        values = values.reshape(-1, 1)
 
         return values, gradients
 
@@ -720,15 +711,17 @@ class StollWerthDriver(Driver):
 
             property_values = noiseless_values + noise * property_uncertainties
 
-            property_gradients = {
-                x: noiseless_gradients[x]
-                + noise * self._fractional_noise * noiseless_gradients[x]
-                for x in noiseless_gradients
-            }
-
             values.append(property_values)
             uncertainties.append(property_uncertainties)
 
-            gradients.append(property_gradients)
+            if compute_gradients:
+
+                property_gradients = {
+                    x: noiseless_gradients[x]
+                    + noise * self._fractional_noise * noiseless_gradients[x]
+                    for x in noiseless_gradients
+                }
+
+                gradients.append(property_gradients)
 
         return values, uncertainties, gradients if compute_gradients else None

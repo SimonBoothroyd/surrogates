@@ -356,6 +356,8 @@ class SurrogateDriver(Driver):
                 target.property_type
             ].evaluate(target_parameters[target.property_type])
 
+            uncertainty = numpy.nan_to_num(uncertainty)
+
             values.append(value)
             uncertainties.append(uncertainty)
 

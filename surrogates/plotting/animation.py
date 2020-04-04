@@ -36,7 +36,7 @@ class AnimatedCornerPlot:
         self._min_parameters = {}
         self._max_parameters = {}
 
-        self._parameter_labels = {}
+        self._parameter_labels = []
 
         self._load_all_parameters()
 
@@ -61,36 +61,26 @@ class AnimatedCornerPlot:
         }
 
         # Extract all of the parameters.
-        all_parameters = {x: defaultdict(list) for x in property_types}
+        all_parameters = defaultdict(list)
 
         for index, snapshot_file_name in enumerate(self._snapshot_file_names):
 
             with open(snapshot_file_name, "rb") as file:
                 snapshot_data: SurrogateDriverSnapshot = pickle.load(file)
 
-            for property_type, parameters in snapshot_data.current_parameters.items():
+            for label in snapshot_data.current_parameters:
+                all_parameters[label].append(snapshot_data.current_parameters[label])
 
-                for label in parameters:
-                    all_parameters[property_type][label].append(parameters[label])
+        # Refactor the parameters into arrays.
+        all_parameters = {
+            x: numpy.concatenate(y).reshape(-1, 1) for x, y in all_parameters.items()
+        }
 
-        for property_type in all_parameters:
+        all_parameters = parameter_dict_to_array(all_parameters, [*all_parameters])
 
-            # Refactor the parameters into arrays.
-            all_parameters[property_type] = {
-                x: numpy.array(y) for x, y in all_parameters[property_type].items()
-            }
-
-            all_parameters[property_type] = parameter_dict_to_array(
-                all_parameters[property_type], parameter_labels[property_type]
-            )
-
-            # Determine the parameter bounds.
-            self._min_parameters[property_type] = numpy.min(
-                all_parameters[property_type], axis=0
-            )
-            self._max_parameters[property_type] = numpy.max(
-                all_parameters[property_type], axis=0
-            )
+        # Determine the parameter bounds.
+        self._min_parameters = numpy.min(all_parameters, axis=0)
+        self._max_parameters = numpy.max(all_parameters, axis=0)
 
         self._parameter_labels = parameter_labels
         self._all_parameters = all_parameters
@@ -102,39 +92,37 @@ class AnimatedCornerPlot:
         trained upon for the parameter arrays.
         """
 
-        for property_type in self._min_parameters:
+        min_parameters = self._min_parameters
+        max_parameters = self._max_parameters
 
-            min_parameters = self._min_parameters[property_type]
-            max_parameters = self._max_parameters[property_type]
+        parameter_labels = self._parameter_labels
+        all_parameters = self._all_parameters
 
-            parameter_labels = self._parameter_labels[property_type]
-            all_parameters = self._all_parameters[property_type]
+        flat_parameter_indices = numpy.argwhere(
+            numpy.isclose(min_parameters, max_parameters)
+        )
+        index_mask = numpy.ones(len(min_parameters), numpy.bool)
+        index_mask[flat_parameter_indices] = 0
 
-            flat_parameter_indices = numpy.argwhere(
-                numpy.isclose(min_parameters, max_parameters)
-            )
-            index_mask = numpy.ones(len(min_parameters), numpy.bool)
-            index_mask[flat_parameter_indices] = 0
+        parameter_labels = [
+            x
+            for i, x in enumerate(parameter_labels)
+            if i not in flat_parameter_indices
+        ]
 
-            parameter_labels = [
-                x
-                for i, x in enumerate(parameter_labels)
-                if i not in flat_parameter_indices
-            ]
+        min_parameters = min_parameters[index_mask]
+        max_parameters = max_parameters[index_mask]
 
-            min_parameters = min_parameters[index_mask]
-            max_parameters = max_parameters[index_mask]
+        all_parameters = all_parameters[:, index_mask]
 
-            all_parameters = all_parameters[:, index_mask]
+        self._min_parameters = min_parameters
+        self._max_parameters = max_parameters
 
-            self._min_parameters[property_type] = min_parameters
-            self._max_parameters[property_type] = max_parameters
-
-            self._parameter_labels[property_type] = parameter_labels
-            self._all_parameters[property_type] = all_parameters
+        self._parameter_labels = parameter_labels
+        self._all_parameters = all_parameters
 
     def _setup_axes(
-        self, axes: numpy.ndarray, property_type: str
+        self, axes: numpy.ndarray
     ) -> Tuple[
         Dict[Tuple[int, int], Line2D],
         Dict[Tuple[int, int], Line2D],
@@ -148,8 +136,6 @@ class AnimatedCornerPlot:
         ----------
         axes: numpy.ndarray
             The axes to set up.
-        property_type: str
-            The property type of interest.
 
         Returns
         -------
@@ -169,10 +155,10 @@ class AnimatedCornerPlot:
         simulation_points = {}
         reweighted_points = {}
 
-        parameter_labels = self._parameter_labels[property_type]
+        parameter_labels = self._parameter_labels
 
-        min_parameters = self._min_parameters[property_type]
-        max_parameters = self._max_parameters[property_type]
+        min_parameters = self._min_parameters
+        max_parameters = self._max_parameters
 
         n_axes = len(parameter_labels) - 2
 
@@ -245,17 +231,17 @@ class AnimatedCornerPlot:
             {
                 x: y
                 for x, y in simulation_parameters.items()
-                if x in self._parameter_labels[property_type]
+                if x in self._parameter_labels
             },
-            self._parameter_labels[property_type],
+            self._parameter_labels,
         )
         reweighted_parameters = parameter_dict_to_array(
             {
                 x: y
                 for x, y in reweighted_parameters.items()
-                if x in self._parameter_labels[property_type]
+                if x in self._parameter_labels
             },
-            self._parameter_labels[property_type],
+            self._parameter_labels,
         )
 
         if property_type not in self._simulation_parameters:
@@ -309,7 +295,7 @@ class AnimatedCornerPlot:
             The brushes used during the rendering.
         """
 
-        parameter_labels = self._parameter_labels[property_type]
+        parameter_labels = self._parameter_labels
 
         with open(self._snapshot_file_names[index], "rb") as file:
             snapshot_data: SurrogateDriverSnapshot = pickle.load(file)
@@ -317,7 +303,7 @@ class AnimatedCornerPlot:
         # Update the convex hull if it has changed.
         self._update_training_data(property_type, snapshot_data)
 
-        all_model_parameters = self._all_parameters[property_type]
+        all_model_parameters = self._all_parameters
 
         # all_training_parameters = numpy.concatenate(
         #     [
@@ -391,7 +377,7 @@ class AnimatedCornerPlot:
         """
 
         # Create the figure and axis
-        n_axes = len(self._parameter_labels[property_type]) - 1
+        n_axes = len(self._parameter_labels) - 1
 
         figure, axes = pyplot.subplots(
             nrows=n_axes,
@@ -407,7 +393,7 @@ class AnimatedCornerPlot:
             reweighted_points,
             simulation_points,
             trace_lines,
-        ) = self._setup_axes(axes, property_type)
+        ) = self._setup_axes(axes)
 
         figure.tight_layout()
 
@@ -421,7 +407,7 @@ class AnimatedCornerPlot:
             simulation_points=simulation_points,
         )
 
-        n_snapshots = len(self._all_parameters[property_type])
+        n_snapshots = len(self._all_parameters)
         # n_snapshots = 10
 
         plot_animation = animation.FuncAnimation(
